@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import * as fc from "fast-check";
-import { computeNotePositions } from "../layout";
+import { computeNotePositions } from "../layout.js";
 
 // Feature: marginalia, Property 5: Margin note layout produces non-overlapping positions
 // **Validates: Requirements 5.3**

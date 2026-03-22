@@ -1,5 +1,5 @@
-import { ConversationStore } from "./conversation-store";
-import type { Message, SideThread, AnchorPosition } from "./models";
+import { ConversationStore } from "./conversation-store.js";
+import type { Message, SideThread, AnchorPosition } from "./models.js";
 
 /**
  * Custom error class for input validation failures.

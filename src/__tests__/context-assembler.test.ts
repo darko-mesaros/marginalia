@@ -8,8 +8,8 @@ import {
   type AnchorPosition,
   type SideThread,
   type Conversation,
-} from "../models";
-import { ContextAssembler } from "../context-assembler";
+} from "../models.js";
+import { ContextAssembler } from "../context-assembler.js";
 
 // Feature: marginalia, Property 10: Full system prompt includes base prompt and all skill files
 // **Validates: Requirements 11.3, 11.6**

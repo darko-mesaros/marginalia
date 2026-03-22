@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { ConversationStore } from "../conversation-store";
+import { ConversationStore } from "../conversation-store.js";
 import {
   ValidationError,
   submitMainQuestion,
   submitSideQuestion,
   submitSideFollowup,
   submitContinuation,
-} from "../conversation-ops";
+} from "../conversation-ops.js";
 
 describe("conversation-ops", () => {
   let store: ConversationStore;

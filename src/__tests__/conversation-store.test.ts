@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { ConversationStore } from "../conversation-store";
-import type { AnchorPosition } from "../models";
+import { ConversationStore } from "../conversation-store.js";
+import type { AnchorPosition } from "../models.js";
 
 describe("ConversationStore", () => {
   let store: ConversationStore;

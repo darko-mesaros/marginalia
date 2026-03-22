@@ -4,6 +4,11 @@ import { randomUUID } from "node:crypto";
 import type { AppConfig, MCPServerConfig } from "./models.js";
 import { getFullSystemPrompt } from "./models.js";
 
+type InputMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
 // --- StreamEvent types for our SSE layer ---
 
 export type StreamEvent =
@@ -30,16 +35,54 @@ export class MarginaliaAgent {
    * Build (or rebuild) the internal Strands Agent with the given tools.
    */
   private buildAgent(tools: McpClient[]): Agent {
+    return this.buildAgentWithSystemPrompt(tools, getFullSystemPrompt(this.config));
+  }
+
+  private buildAgentWithSystemPrompt(
+    tools: McpClient[],
+    systemPrompt: string
+  ): Agent {
     const model = new BedrockModel({
       modelId: this.config.bedrockModelId,
     });
 
     return new Agent({
       model,
-      systemPrompt: getFullSystemPrompt(this.config),
+      systemPrompt,
       tools: [...tools],
       printer: false,
     });
+  }
+
+  private normalizeInvocationMessages(messages: InputMessage[]): {
+    systemPrompt: string;
+    messages: Array<{ role: "user" | "assistant"; content: Array<{ text: string }> }>;
+  } {
+    const systemParts: string[] = [];
+    const conversationMessages: Array<{
+      role: "user" | "assistant";
+      content: Array<{ text: string }>;
+    }> = [];
+
+    for (const message of messages) {
+      if (message.role === "system") {
+        systemParts.push(message.content);
+        continue;
+      }
+
+      conversationMessages.push({
+        role: message.role,
+        content: [{ text: message.content }],
+      });
+    }
+
+    return {
+      systemPrompt:
+        systemParts.length > 0
+          ? systemParts.join("\n\n")
+          : getFullSystemPrompt(this.config),
+      messages: conversationMessages,
+    };
   }
 
   /**
@@ -49,20 +92,24 @@ export class MarginaliaAgent {
    * StreamEvent types suitable for SSE delivery to the frontend.
    */
   async *streamResponse(
-    messages: Array<{ role: string; content: string }>
+    messages: InputMessage[]
   ): AsyncGenerator<StreamEvent> {
     try {
-      // Convert our simple message format into Strands SDK Message format.
-      // The SDK's stream() accepts string | ContentBlock[] | Message[] etc.
-      // We pass the last user message as a string prompt — the agent manages
-      // its own conversation history internally.
-      const lastMessage = messages[messages.length - 1];
-      if (!lastMessage) {
+      if (messages.length === 0) {
         yield { type: "error", message: "No messages provided" };
         return;
       }
 
-      const prompt = lastMessage.content;
+      const invocation = this.normalizeInvocationMessages(messages);
+      if (invocation.messages.length === 0) {
+        yield { type: "error", message: "No conversational messages provided" };
+        return;
+      }
+
+      const agent = this.buildAgentWithSystemPrompt(
+        this.mcpClients,
+        invocation.systemPrompt
+      );
       const messageId = randomUUID();
 
       // Pending tool use state — we accumulate tool info across events
@@ -72,7 +119,7 @@ export class MarginaliaAgent {
         { name: string; input: object }
       >();
 
-      const stream = this.agent.stream(prompt);
+      const stream = agent.stream(invocation.messages);
 
       for await (const event of stream) {
         switch (event.type) {
