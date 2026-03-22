@@ -80,3 +80,11 @@ Runs 133 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across
 - marked.js, highlight.js, tippy.js (this one caused me troubl), DOMPurify via CDN
 - CSS Custom Highlight API for text anchoring
 - MCP tool integration via settings UI (work in progress)
+
+## TODO
+- [ ] Implement conversation saving
+- [ ] Add support to other model providers
+- [ ] Improve stability (yeah)
+- [ ] The SVG lines get messed all the time up until you scroll
+- [ ] Dark mode
+- [ ] Make the SVG lines smoother
