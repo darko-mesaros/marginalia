@@ -10,7 +10,9 @@ This all started with this Excalidraw drawing I made:
 
 ![Excalidraw drawing](/img/skill_gap.png)
 
-And from there, with some [Strands](https://strandsagents.com/) and a whole lot of TypeScript, it sort of became a thing! 🥳
+And from there, with some [Strands](https://strandsagents.com/) and a whole lot of TypeScript, it sort of became this freakin' thing! 🥳
+
+![Marginalia UI](/img/marginalia.png)
 
 ## Prerequisites
 

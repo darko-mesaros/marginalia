@@ -7,7 +7,7 @@
 ## Backend
 - **Express 5** — HTTP server and routing
 - **Strands Agents SDK** (`@strands-agents/sdk`) — LLM agent with Bedrock integration
-- **AWS Bedrock** — LLM provider (default model: `us.anthropic.claude-sonnet-4-20250514`)
+- **AWS Bedrock** — LLM provider (default model: `qwen.qwen3-vl-235b-a22b`)
 - **MCP SDK** (`@modelcontextprotocol/sdk`) — MCP server integration via stdio transport
 - **SSE** (Server-Sent Events) — streaming responses to the frontend
 - **uuid** — ID generation
