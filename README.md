@@ -8,7 +8,7 @@ Marginalia is a web-based LLM explainer tool that renders structured explanation
 
 This all started with this Excalidraw drawing I made:
 
-![/img/skill_gap.png]
+![Excalidraw drawing](/img/skill_gap.png)
 
 And from there, with some [Strands](https://strandsagents.com/) and a whole lot of TypeScript, it sort of became a thing! 🥳
 
