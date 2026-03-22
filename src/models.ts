@@ -34,9 +34,19 @@ export interface SideThread {
 
 export interface Conversation {
   id: string;
+  title: string;
   mainThread: Message[];
   sideThreads: SideThread[];
   createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  createdAt: string;  // ISO 8601
+  updatedAt: string;  // ISO 8601
+  messageCount: number;
 }
 
 // --- Configuration Models ---
@@ -86,11 +96,14 @@ export function createSideThread(anchor: AnchorPosition): SideThread {
 }
 
 export function createConversation(): Conversation {
+  const now = new Date();
   return {
     id: randomUUID(),
+    title: "Untitled Conversation",
     mainThread: [],
     sideThreads: [],
-    createdAt: new Date(),
+    createdAt: now,
+    updatedAt: now,
   };
 }
 

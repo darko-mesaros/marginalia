@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import * as fc from "fast-check";
 import { ConversationStore } from "../conversation-store.js";
 import type { AnchorPosition } from "../models.js";
 
@@ -103,6 +104,17 @@ describe("ConversationStore", () => {
     });
   });
 
+  describe("setConversation", () => {
+    it("replaces the active conversation", () => {
+      const first = store.getOrCreateConversation();
+      const store2 = new ConversationStore();
+      const second = store2.getOrCreateConversation();
+      store.setConversation(second);
+      expect(store.getConversation()!.id).toBe(second.id);
+      expect(store.getConversation()!.id).not.toBe(first.id);
+    });
+  });
+
   describe("reset", () => {
     it("clears the conversation", () => {
       store.addMainMessage("user", "Hello");
@@ -116,5 +128,48 @@ describe("ConversationStore", () => {
       const second = store.getOrCreateConversation();
       expect(first.id).not.toBe(second.id);
     });
+  });
+});
+
+/**
+ * Feature: conversation-saving, Property 6: updatedAt advances on mutation
+ * Validates: Requirements 5.3
+ */
+describe("Property 6: updatedAt advances on message addition", () => {
+  const roleArb = fc.constantFrom("user" as const, "assistant" as const);
+  const contentArb = fc.string({ minLength: 1 });
+
+  it("updatedAt >= previous updatedAt after addMainMessage", () => {
+    fc.assert(
+      fc.property(roleArb, contentArb, (role, content) => {
+        const store = new ConversationStore();
+        store.getOrCreateConversation();
+        const before = store.getConversation()!.updatedAt.getTime();
+        store.addMainMessage(role, content);
+        const after = store.getConversation()!.updatedAt.getTime();
+        return after >= before;
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it("updatedAt >= previous updatedAt after addSideMessage", () => {
+    const anchor: AnchorPosition = {
+      messageId: "msg-1",
+      startOffset: 0,
+      endOffset: 5,
+      selectedText: "hello",
+    };
+    fc.assert(
+      fc.property(roleArb, contentArb, (role, content) => {
+        const store = new ConversationStore();
+        const thread = store.createSideThread(anchor);
+        const before = store.getConversation()!.updatedAt.getTime();
+        store.addSideMessage(thread.id, role, content);
+        const after = store.getConversation()!.updatedAt.getTime();
+        return after >= before;
+      }),
+      { numRuns: 100 }
+    );
   });
 });

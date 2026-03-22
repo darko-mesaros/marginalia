@@ -6,9 +6,12 @@
 // ---------------------------------------------------------------------------
 const state = {
   conversation: {
+    id: null,                         // Active conversation ID
+    title: "Untitled Conversation",   // Active conversation title
     mainThread: [],     // [{id, role, content, toolInvocations}]
     sideThreads: [],    // [{id, anchor, messages, collapsed}]
   },
+  conversationList: [],   // ConversationSummary[] cache
   settings: {
     systemPrompt: "",
     skillFiles: [],     // [{id, name, order}]
@@ -46,12 +49,15 @@ const state = {
 // ---------------------------------------------------------------------------
 // DOM references
 // ---------------------------------------------------------------------------
+const sidebarToggleBtn = document.getElementById("sidebar-toggle-btn");
+const contentArea = document.getElementById("content-area");
 const questionInput = document.getElementById("question-input");
 const askBtn = document.getElementById("ask-btn");
 const mainPanel = document.getElementById("main-panel");
 const marginNotePanel = document.getElementById("margin-note-panel");
 const continuationInput = document.getElementById("continuation-input");
 const continueBtn = document.getElementById("continue-btn");
+const newConversationBtn = document.getElementById("new-conversation-btn");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -79,6 +85,45 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
+/**
+ * Format an ISO 8601 date string as a human-readable relative timestamp.
+ * @param {string} dateString — ISO 8601 date string
+ * @param {Date} [now=new Date()] — reference time (for testability)
+ * @returns {string}
+ */
+function formatRelativeTime(dateString, now) {
+  if (!now) now = new Date();
+  const then = new Date(dateString);
+  const diffMs = now.getTime() - then.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+
+  if (diffSec < 60) return "just now";
+
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) {
+    return diffMin === 1 ? "1 minute ago" : `${diffMin} minutes ago`;
+  }
+
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) {
+    return diffHr === 1 ? "1 hour ago" : `${diffHr} hours ago`;
+  }
+
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) {
+    return diffDay === 1 ? "1 day ago" : `${diffDay} days ago`;
+  }
+
+  // ≥30 days — short date
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const month = months[then.getMonth()];
+  const day = then.getDate();
+  if (then.getFullYear() === now.getFullYear()) {
+    return `${month} ${day}`;
+  }
+  return `${month} ${day}, ${then.getFullYear()}`;
+}
+
 // ---------------------------------------------------------------------------
 // InputBar logic
 // ---------------------------------------------------------------------------
@@ -104,6 +149,342 @@ questionInput.addEventListener("keydown", (e) => {
     handleAskSubmit();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Sidebar toggle logic
+// ---------------------------------------------------------------------------
+
+function toggleSidebar() {
+  const isOpen = contentArea.classList.toggle("sidebar-open");
+  sidebarToggleBtn.setAttribute(
+    "aria-label",
+    isOpen ? "Close conversation library" : "Open conversation library"
+  );
+  if (isOpen) {
+    fetchConversationList();
+  }
+}
+
+sidebarToggleBtn.addEventListener("click", toggleSidebar);
+
+// ---------------------------------------------------------------------------
+// Conversation list fetching and rendering
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch conversation summaries from the API and render them in the sidebar.
+ * Stores the result in state.conversationList for caching.
+ */
+async function fetchConversationList() {
+  try {
+    const res = await fetch("/api/conversations");
+    if (!res.ok) {
+      throw new Error(`Failed to load conversations (${res.status})`);
+    }
+    const summaries = await res.json();
+    state.conversationList = summaries;
+    renderConversationList();
+  } catch (err) {
+    state.conversationList = [];
+    const listEl = document.getElementById("conversation-list");
+    listEl.innerHTML = "";
+    const errorEl = document.createElement("div");
+    errorEl.style.cssText = "color: #c62828; background: #ffebee; border-radius: 4px; padding: 12px; margin: 8px;";
+    errorEl.textContent = err.message || "Failed to load conversations";
+    const retryBtn = document.createElement("button");
+    retryBtn.type = "button";
+    retryBtn.textContent = "Retry";
+    retryBtn.style.cssText = "margin-top: 8px; cursor: pointer;";
+    retryBtn.addEventListener("click", fetchConversationList);
+    errorEl.appendChild(retryBtn);
+    listEl.appendChild(errorEl);
+  }
+}
+
+/**
+ * Render the cached conversation list into the #conversation-list element.
+ * Highlights the active conversation entry if one matches state.conversation.id.
+ */
+function renderConversationList() {
+  const listEl = document.getElementById("conversation-list");
+  listEl.innerHTML = "";
+
+  const summaries = state.conversationList || [];
+
+  if (summaries.length === 0) {
+    const placeholder = document.createElement("div");
+    placeholder.style.cssText = "color: var(--color-text-secondary, #888); padding: 12px; text-align: center;";
+    placeholder.textContent = "No saved conversations";
+    listEl.appendChild(placeholder);
+    return;
+  }
+
+  const activeId = state.conversation && state.conversation.id;
+
+  for (const summary of summaries) {
+    const btn = document.createElement("button");
+    btn.className = "conversation-entry";
+    btn.type = "button";
+    btn.setAttribute("data-id", summary.id);
+
+    if (summary.id === activeId) {
+      btn.classList.add("active");
+    }
+
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "conversation-entry-title";
+    titleSpan.textContent = summary.title || "Untitled Conversation";
+
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "conversation-entry-time";
+    timeSpan.textContent = formatRelativeTime(summary.updatedAt);
+
+    btn.appendChild(titleSpan);
+    btn.appendChild(timeSpan);
+
+    btn.addEventListener("click", () => {
+      loadConversation(summary.id);
+    });
+
+    listEl.appendChild(btn);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// New conversation creation and title helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Update the conversation title display element.
+ * @param {string} title
+ */
+function updateConversationTitle(title) {
+  document.getElementById("conversation-title").textContent = title;
+}
+
+/**
+ * Create a new conversation via the API and reset the UI to a clean state.
+ * On failure, shows an error without clearing the current conversation.
+ */
+async function handleNewConversation() {
+  try {
+    const res = await fetch("/api/conversations/new", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to create conversation (${res.status})`);
+    }
+
+    const data = await res.json();
+
+    // Clear panels
+    mainPanel.innerHTML = "";
+    marginNotePanel.innerHTML = "";
+    document.getElementById("continuation-area").classList.remove("visible");
+
+    // Reset state
+    state.conversation = {
+      id: data.id,
+      title: "Untitled Conversation",
+      mainThread: [],
+      sideThreads: [],
+    };
+
+    // Update title display
+    updateConversationTitle("Untitled Conversation");
+
+    // Clear anchor highlights
+    anchorRanges.length = 0;
+    if (typeof CSS !== "undefined" && CSS.highlights) {
+      CSS.highlights.delete("marginalia-anchors");
+    }
+
+    // Re-enable and focus input
+    questionInput.disabled = false;
+    askBtn.disabled = false;
+    questionInput.value = "";
+    questionInput.focus();
+
+    // Refresh sidebar list
+    fetchConversationList();
+  } catch (err) {
+    // Show error in sidebar without clearing current conversation
+    const listEl = document.getElementById("conversation-list");
+    const errorEl = document.createElement("div");
+    errorEl.style.cssText = "color: #c62828; background: #ffebee; border-radius: 4px; padding: 12px; margin: 8px;";
+    errorEl.textContent = err.message || "Failed to create new conversation";
+    listEl.prepend(errorEl);
+  }
+}
+
+// Wire click event on New Conversation button
+newConversationBtn.addEventListener("click", handleNewConversation);
+
+// ---------------------------------------------------------------------------
+// Load conversation
+// ---------------------------------------------------------------------------
+
+/**
+ * Show an inline error message in the main panel.
+ * @param {string} message
+ */
+function showLoadError(message) {
+  const errorEl = document.createElement("div");
+  errorEl.className = "error-message";
+  errorEl.style.cssText = "color: #c62828; padding: 12px; background: #ffebee; border-radius: 6px; margin-top: 8px;";
+  errorEl.textContent = message;
+  mainPanel.appendChild(errorEl);
+}
+
+/**
+ * Load a saved conversation by ID and re-render the main panel.
+ * Handles 404 (stale entry) and other errors gracefully.
+ * NOTE: Side thread re-rendering (task 5.2) and anchor highlights (task 5.3) will be added later.
+ * @param {string} id
+ */
+async function loadConversation(id) {
+  try {
+    const res = await fetch(`/api/conversations/${id}`);
+
+    if (res.status === 404) {
+      showLoadError("Conversation not found");
+      fetchConversationList();
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`Failed to load conversation (${res.status})`);
+    }
+
+    const data = await res.json();
+
+    // Replace state
+    state.conversation = {
+      id: data.id,
+      title: data.title || "Untitled Conversation",
+      mainThread: data.mainThread || [],
+      sideThreads: data.sideThreads || [],
+    };
+
+    // Update title
+    updateConversationTitle(state.conversation.title);
+
+    // Clear and re-render main panel
+    mainPanel.innerHTML = "";
+
+    let isFirstUser = true;
+    for (const msg of state.conversation.mainThread) {
+      if (msg.role === "user") {
+        // Show <hr> divider for subsequent user messages (not the first)
+        if (!isFirstUser) {
+          const divider = document.createElement("hr");
+          divider.className = "continuation-divider";
+          mainPanel.appendChild(divider);
+        }
+        isFirstUser = false;
+
+        const questionDiv = document.createElement("div");
+        questionDiv.style.cssText = "font-weight: 600; margin-bottom: 12px; color: var(--color-text-secondary);";
+        questionDiv.textContent = msg.content;
+        mainPanel.appendChild(questionDiv);
+      } else if (msg.role === "assistant") {
+        const section = document.createElement("section");
+        section.setAttribute("data-message-id", msg.id);
+        section.innerHTML = renderMarkdown(msg.content);
+        mainPanel.appendChild(section);
+      }
+    }
+
+    // Show/hide continuation area
+    const hasAssistant = state.conversation.mainThread.some(m => m.role === "assistant");
+    const continuationArea = document.getElementById("continuation-area");
+    if (hasAssistant) {
+      continuationArea.classList.add("visible");
+    } else {
+      continuationArea.classList.remove("visible");
+    }
+
+    // Re-enable input
+    questionInput.disabled = false;
+    askBtn.disabled = false;
+
+    // Refresh sidebar to highlight active conversation
+    renderConversationList();
+
+    // Clear and re-render side threads as margin notes
+    marginNotePanel.innerHTML = "";
+
+    for (const thread of state.conversation.sideThreads) {
+      // Find first user message and last assistant message
+      const userMsg = thread.messages.find(m => m.role === "user");
+      if (!userMsg) continue;
+
+      const noteUI = renderMarginNote({
+        selectedText: thread.anchor.selectedText,
+        question: userMsg.content,
+        anchorMessageId: thread.anchor.messageId,
+      });
+
+      // Remove loading indicator and fill in content
+      removeMarginNoteLoading(noteUI.responseEl);
+
+      // Find the first assistant response
+      const firstAssistant = thread.messages.find(m => m.role === "assistant");
+      if (firstAssistant) {
+        noteUI.responseEl.innerHTML = renderMarkdown(firstAssistant.content);
+      }
+
+      // Set thread ID for follow-up wiring
+      noteUI.el.dataset.threadId = thread.id;
+
+      // Render any follow-up Q&A pairs (messages beyond the first user+assistant pair)
+      const followUpMessages = thread.messages.slice(2); // skip first user + first assistant
+      for (let i = 0; i < followUpMessages.length; i += 2) {
+        const followUpQ = followUpMessages[i];
+        const followUpA = followUpMessages[i + 1];
+
+        if (followUpQ && followUpQ.role === "user") {
+          const qEl = document.createElement("div");
+          qEl.className = "margin-note-question";
+          qEl.textContent = followUpQ.content;
+          noteUI.bodyEl.appendChild(qEl);
+        }
+
+        if (followUpA && followUpA.role === "assistant") {
+          const aEl = document.createElement("div");
+          aEl.className = "margin-note-response";
+          aEl.innerHTML = renderMarkdown(followUpA.content);
+          noteUI.bodyEl.appendChild(aEl);
+        }
+      }
+    }
+
+    // Clear stale anchor highlights from previous conversation
+    anchorRanges.length = 0;
+    if (typeof CSS !== "undefined" && CSS.highlights) {
+      CSS.highlights.delete("marginalia-anchors");
+    }
+
+    // Re-apply highlights for each side thread
+    for (const thread of state.conversation.sideThreads) {
+      highlightAnchor(
+        thread.anchor.messageId,
+        thread.anchor.startOffset,
+        thread.anchor.endOffset
+      );
+    }
+
+    // Redraw connector lines after all notes and highlights are rendered
+    drawAnchorConnectors();
+
+  } catch (err) {
+    // On non-404 error: show error, don't modify current state
+    showLoadError(err.message || "Failed to load conversation");
+  }
+}
 
 // ---------------------------------------------------------------------------
 // MainPanel rendering
@@ -270,6 +651,15 @@ async function submitQuestion(question) {
               break;
             }
 
+            case "title": {
+              const title = evt.data.title;
+              if (title) {
+                state.conversation.title = title;
+                updateConversationTitle(title);
+              }
+              break;
+            }
+
             case "done": {
               removeLoading(section);
               const messageId = evt.data.message_id || tempId;
@@ -291,6 +681,7 @@ async function submitQuestion(question) {
               if (continuationArea) {
                 continuationArea.classList.add("visible");
               }
+              fetchConversationList();
               break;
             }
 
@@ -312,6 +703,12 @@ async function submitQuestion(question) {
           removeLoading(section);
           accumulatedContent += evt.data.content || "";
           section.innerHTML = renderMarkdown(accumulatedContent);
+        } else if (evt.event === "title") {
+          const title = evt.data.title;
+          if (title) {
+            state.conversation.title = title;
+            updateConversationTitle(title);
+          }
         } else if (evt.event === "done") {
           removeLoading(section);
           const messageId = evt.data.message_id || tempId;
@@ -327,6 +724,7 @@ async function submitQuestion(question) {
           if (continuationArea) {
             continuationArea.classList.add("visible");
           }
+          fetchConversationList();
         } else if (evt.event === "error") {
           showError(section, evt.data.message || evt.data || "An error occurred");
         }
@@ -452,6 +850,7 @@ async function submitContinuation(question) {
               });
 
               section.innerHTML = renderMarkdown(accumulatedContent);
+              fetchConversationList();
               break;
             }
 
@@ -484,6 +883,7 @@ async function submitContinuation(question) {
             toolInvocations: [],
           });
           section.innerHTML = renderMarkdown(accumulatedContent);
+          fetchConversationList();
         } else if (evt.event === "error") {
           showError(section, evt.data.message || evt.data || "An error occurred");
         }
@@ -966,6 +1366,7 @@ async function submitSideQuestion(selectedText, question, anchorPosition) {
             // Re-layout margin notes after new note is fully rendered
             layoutMarginNotes();
             drawAnchorConnectors();
+            fetchConversationList();
           } else if (evt.event === "error") {
             const errMsg = evt.data.message || evt.data || "An error occurred";
             showMarginNoteError(noteUI.responseEl, errMsg);
@@ -1018,6 +1419,7 @@ async function submitSideQuestion(selectedText, question, anchorPosition) {
           // Re-layout margin notes after new note is fully rendered
           layoutMarginNotes();
           drawAnchorConnectors();
+          fetchConversationList();
         } else if (evt.event === "error") {
           showMarginNoteError(noteUI.responseEl, evt.data.message || evt.data || "An error occurred");
         }
@@ -1119,6 +1521,7 @@ async function submitSideFollowup(threadId, question, noteUI) {
                 { id: evt.data.message_id || uid(), role: "assistant", content: accumulatedContent, toolInvocations: [] }
               );
             }
+            fetchConversationList();
           } else if (evt.event === "error") {
             removeMarginNoteLoading(responseEl);
             showMarginNoteError(responseEl, evt.data.message || evt.data || "An error occurred");
@@ -1151,6 +1554,7 @@ async function submitSideFollowup(threadId, question, noteUI) {
               { id: evt.data.message_id || uid(), role: "assistant", content: accumulatedContent, toolInvocations: [] }
             );
           }
+          fetchConversationList();
         } else if (evt.event === "error") {
           removeMarginNoteLoading(responseEl);
           showMarginNoteError(responseEl, evt.data.message || evt.data || "An error occurred");

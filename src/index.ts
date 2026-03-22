@@ -4,6 +4,9 @@ import { fileURLToPath } from "node:url";
 import { ConversationStore } from "./conversation-store.js";
 import { MarginaliaAgent } from "./agent.js";
 import { createRouter } from "./routes.js";
+import { JsonFilePersistenceAdapter } from "./persistence-adapter.js";
+import { ConversationLibrary } from "./conversation-library.js";
+import { TitleGenerator } from "./title-generator.js";
 import type { AppConfig } from "./models.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,18 +22,25 @@ const config: AppConfig = {
 
 const store = new ConversationStore();
 const agent = new MarginaliaAgent(config);
-const router = createRouter({ store, agent, config });
+const adapter = new JsonFilePersistenceAdapter();
+const library = new ConversationLibrary(adapter);
+const titleGenerator = new TitleGenerator();
 
 const app = express();
 
 app.use(express.json());
-app.use(router);
-app.use(express.static(path.resolve(__dirname, "..", "frontend")));
 
 const port = parseInt(process.env.PORT ?? "3000", 10);
 
-app.listen(port, () => {
-  console.log(`Marginalia server listening on http://localhost:${port}`);
-});
+(async () => {
+  await library.init();
+  const router = createRouter({ store, agent, config, library, titleGenerator });
+  app.use(router);
+  app.use(express.static(path.resolve(__dirname, "..", "frontend")));
+
+  app.listen(port, () => {
+    console.log(`Marginalia server listening on http://localhost:${port}`);
+  });
+})();
 
 export { app };

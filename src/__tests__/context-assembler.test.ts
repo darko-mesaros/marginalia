@@ -117,12 +117,14 @@ describe("Property 4: Context assembly includes all side threads with anchor met
   });
 
   const conversationArb: fc.Arbitrary<Conversation> = fc
-    .tuple(fc.uuid(), mainThreadArb, sideThreadsArb, fc.date())
-    .map(([id, mainThread, sideThreads, createdAt]) => ({
+    .tuple(fc.uuid(), mainThreadArb, sideThreadsArb, fc.date(), fc.date())
+    .map(([id, mainThread, sideThreads, createdAt, updatedAt]) => ({
       id,
+      title: "Test Conversation",
       mainThread,
       sideThreads,
       createdAt,
+      updatedAt,
     }));
 
   const appConfigArb: fc.Arbitrary<AppConfig> = fc
@@ -320,11 +322,14 @@ describe("Property 6: Side thread follow-up includes thread history", () => {
         fc.array(otherSideThreadArb, { minLength: 0, maxLength: 3 }),
         newQuestionArb,
         (config, mainThread, targetThread, otherThreads, newQuestion) => {
+          const now = new Date();
           const conversation: Conversation = {
             id: "conv-1",
+            title: "Test Conversation",
             mainThread,
             sideThreads: [targetThread, ...otherThreads],
-            createdAt: new Date(),
+            createdAt: now,
+            updatedAt: now,
           };
 
           const assembler = new ContextAssembler(config);

@@ -343,3 +343,21 @@ describe("Property 12: Side thread contains both question and response", () => {
     );
   });
 });
+
+
+// Feature: conversation-saving, Property 5: new conversation defaults
+// **Validates: Requirements 5.2, 5.4**
+
+describe("Property 5: New conversation title default", () => {
+  it("createConversation() always returns title='Untitled Conversation' and updatedAt equal to createdAt", () => {
+    fc.assert(
+      fc.property(fc.constant(null), (_) => {
+        const conversation = createConversation();
+
+        expect(conversation.title).toBe("Untitled Conversation");
+        expect(conversation.updatedAt.getTime()).toBe(conversation.createdAt.getTime());
+      }),
+      { numRuns: 100 }
+    );
+  });
+});

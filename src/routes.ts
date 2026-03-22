@@ -7,6 +7,9 @@ import { ContextAssembler } from "./context-assembler.js";
 import { submitMainQuestion, submitSideQuestion, submitSideFollowup, submitContinuation } from "./conversation-ops.js";
 import { validateAskBody, validateSideQuestionBody, validateSideFollowupBody, validateContinueBody } from "./validation.js";
 import type { AppConfig } from "./models.js";
+import { LibraryError } from "./conversation-library.js";
+import type { ConversationLibrary } from "./conversation-library.js";
+import type { TitleGenerator } from "./title-generator.js";
 import {
   initSSE,
   onClientDisconnect,
@@ -21,10 +24,12 @@ interface RouterDeps {
   store: ConversationStore;
   agent: MarginaliaAgent;
   config: AppConfig;
+  library: ConversationLibrary;
+  titleGenerator: TitleGenerator;
 }
 
 export function createRouter(deps: RouterDeps): Router {
-  const { store, agent, config } = deps;
+  const { store, agent, config, library, titleGenerator } = deps;
   const router = Router();
 
   router.post("/api/ask", validateAskBody, async (req: Request, res: Response) => {
@@ -36,6 +41,19 @@ export function createRouter(deps: RouterDeps): Router {
 
       // Assemble context for the LLM
       const conversation = store.getOrCreateConversation();
+      library.save(conversation).catch(err => console.error("[routes] save failed:", err));
+
+      // Fire-and-forget title generation on first message
+      if (conversation.mainThread.length === 1) {
+        titleGenerator.generateAsync(conversation.id, question, async (title) => {
+          conversation.title = title;
+          library.save(conversation).catch(err => console.error("[routes] title save failed:", err));
+          if (res.writable) {
+            writeSSEEvent(res, "title", { conversation_id: conversation.id, title });
+          }
+        });
+      }
+
       const assembler = new ContextAssembler(config);
       const contextMessages = assembler.assembleForMain(conversation, question);
 
@@ -71,6 +89,7 @@ export function createRouter(deps: RouterDeps): Router {
 
           case "done": {
             const assistantMsg = store.addMainMessage("assistant", accumulatedContent);
+            library.save(store.getOrCreateConversation()).catch(err => console.error("[routes] save failed:", err));
             writeDoneEvent(res, assistantMsg.id);
             res.end();
             return;
@@ -87,6 +106,7 @@ export function createRouter(deps: RouterDeps): Router {
       // still store whatever content we accumulated
       if (!disconnected && accumulatedContent.length > 0) {
         store.addMainMessage("assistant", accumulatedContent);
+        library.save(store.getOrCreateConversation()).catch(err => console.error("[routes] save failed:", err));
       }
       if (!disconnected) {
         res.end();
@@ -142,6 +162,7 @@ export function createRouter(deps: RouterDeps): Router {
 
           case "done": {
             const assistantMsg = store.addSideMessage(thread.id, "assistant", accumulatedContent);
+            library.save(store.getOrCreateConversation()).catch(err => console.error("[routes] save failed:", err));
             writeSSEEvent(res, "done", { message_id: assistantMsg.id, thread_id: thread.id });
             res.end();
             return;
@@ -156,6 +177,7 @@ export function createRouter(deps: RouterDeps): Router {
 
       if (!disconnected && accumulatedContent.length > 0) {
         store.addSideMessage(thread.id, "assistant", accumulatedContent);
+        library.save(store.getOrCreateConversation()).catch(err => console.error("[routes] save failed:", err));
       }
       if (!disconnected) {
         res.end();
@@ -205,6 +227,7 @@ export function createRouter(deps: RouterDeps): Router {
 
           case "done": {
             const assistantMsg = store.addSideMessage(thread_id, "assistant", accumulatedContent);
+            library.save(store.getOrCreateConversation()).catch(err => console.error("[routes] save failed:", err));
             writeSSEEvent(res, "done", { message_id: assistantMsg.id, thread_id });
             res.end();
             return;
@@ -219,6 +242,7 @@ export function createRouter(deps: RouterDeps): Router {
 
       if (!disconnected && accumulatedContent.length > 0) {
         store.addSideMessage(thread_id, "assistant", accumulatedContent);
+        library.save(store.getOrCreateConversation()).catch(err => console.error("[routes] save failed:", err));
       }
       if (!disconnected) {
         res.end();
@@ -272,6 +296,7 @@ export function createRouter(deps: RouterDeps): Router {
 
           case "done": {
             const assistantMsg = store.addMainMessage("assistant", accumulatedContent);
+            library.save(store.getOrCreateConversation()).catch(err => console.error("[routes] save failed:", err));
             writeDoneEvent(res, assistantMsg.id);
             res.end();
             return;
@@ -286,6 +311,7 @@ export function createRouter(deps: RouterDeps): Router {
 
       if (!disconnected && accumulatedContent.length > 0) {
         store.addMainMessage("assistant", accumulatedContent);
+        library.save(store.getOrCreateConversation()).catch(err => console.error("[routes] save failed:", err));
       }
       if (!disconnected) {
         res.end();
@@ -298,6 +324,47 @@ export function createRouter(deps: RouterDeps): Router {
         writeErrorEvent(res, message);
         res.end();
       }
+    }
+  });
+
+  // --- Conversation library endpoints ---
+
+  router.get("/api/conversations", async (_req: Request, res: Response) => {
+    try {
+      const summaries = await library.list();
+      res.status(200).json(summaries);
+    } catch {
+      res.status(500).json({ error: "Failed to list conversations" });
+    }
+  });
+
+  router.post("/api/conversations/new", async (_req: Request, res: Response) => {
+    try {
+      const conversation = store.getConversation();
+      if (conversation && conversation.mainThread.length === 0) {
+        await library.delete(conversation.id);
+      }
+      store.reset();
+      const newConversation = store.getOrCreateConversation();
+      await library.save(newConversation);
+      res.status(201).json({ id: newConversation.id });
+    } catch {
+      res.status(500).json({ error: "Failed to create new conversation" });
+    }
+  });
+
+  router.get("/api/conversations/:id", async (req: Request, res: Response) => {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const loaded = await library.load(id);
+      store.setConversation(loaded);
+      res.status(200).json(loaded);
+    } catch (err) {
+      if (err instanceof LibraryError && err.code === "NOT_FOUND") {
+        res.status(404).json({ error: "Conversation not found" });
+        return;
+      }
+      res.status(500).json({ error: "Failed to load conversation" });
     }
   });
 

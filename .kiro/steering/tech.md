@@ -38,13 +38,19 @@ npm run dev
 # Run all tests (single pass)
 npm test
 
-# TypeScript compile check
+# TypeScript compile check (passes as of 2026-03-22)
 npm run build
 ```
+
+## Build Notes
+
+- `npm run build` passes — root cause of prior failures was Node16 ESM resolution requiring explicit `.js` extensions on all internal and test imports
+- All imports must use `.js` extension even for `.ts` source files (Node16 module resolution requirement)
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `3000` | Server port |
-| `BEDROCK_MODEL_ID` | `qwen.qwen3-vl-235b-a22b` | Bedrock model ID |
+| `BEDROCK_MODEL_ID` | `qwen.qwen3-vl-235b-a22b` | Bedrock model ID for main agent |
+| `TITLE_MODEL_ID` | (falls back to `BEDROCK_MODEL_ID`) | Bedrock model ID for title generation |

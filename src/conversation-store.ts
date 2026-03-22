@@ -35,6 +35,7 @@ export class ConversationStore {
     const convo = this.getOrCreateConversation();
     const message = createMessage(role, content);
     convo.mainThread.push(message);
+    convo.updatedAt = new Date();
     return message;
   }
 
@@ -53,7 +54,13 @@ export class ConversationStore {
     }
     const message = createMessage(role, content);
     thread.messages.push(message);
+    convo.updatedAt = new Date();
     return message;
+  }
+
+  /** Replaces the active conversation with the provided one. */
+  setConversation(conversation: Conversation): void {
+    this.conversation = conversation;
   }
 
   /** Clears the conversation, resetting the store. */

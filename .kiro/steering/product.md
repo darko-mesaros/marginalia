@@ -17,3 +17,35 @@ Marginalia is a web-based LLM explainer tool. Users ask a question, receive a ma
 - All threads share context — the LLM is aware of every margin note discussion
 - MCP tool integration is configurable via a settings UI
 - Skill files can be added to extend the system prompt
+
+## API Endpoints
+
+- `POST /api/ask` — submit a main thread question (also triggers title generation on first message, emits `title` SSE event)
+- `POST /api/side-question` — spawn a new side thread anchored to a text selection
+- `POST /api/side-followup` — continue an existing side thread
+- `POST /api/continue` — continue the main thread after side notes have been added
+- `GET /api/conversations` — list saved conversations (returns `ConversationSummary[]` sorted by most recent)
+- `GET /api/conversations/:id` — load a saved conversation (replaces active conversation in store)
+- `POST /api/conversations/new` — start a fresh conversation (cleans up empty ones)
+
+## Persistence
+
+Conversations are auto-saved to `./data/conversations/{id}.json` after every message. Each conversation has a `title` (generated asynchronously from the first question via a separate Bedrock model call) and an `updatedAt` timestamp bumped on every mutation.
+
+## Conversation Library UI
+
+The frontend includes a collapsible sidebar for browsing and managing saved conversations:
+
+- Sidebar toggles open/closed via a hamburger button in the top bar
+- Lists all saved conversations sorted by most recent, showing title and relative timestamp
+- Clicking a conversation loads it fully (main thread + all side threads with anchors)
+- "New Conversation" button starts a fresh session (auto-cleans empty conversations)
+- Active conversation title is displayed in the top bar header
+- Conversation list auto-refreshes after every completed streaming response (ask, continue, side-question, side-followup)
+- Title updates arrive via SSE `title` events and reflect in both the header and the sidebar list
+
+## Architectural Decision: Conversation Ownership
+
+`ConversationStore` is the canonical source of truth — not Strands' internal message history. The app's conversation model is non-linear (main thread + multiple anchored side threads), so `ContextAssembler` projects that structure into a linear message sequence for each request. Strands is used as a stateless per-invocation execution engine. A fresh agent is created per request with the full reconstructed context, avoiding state drift.
+
+Known limitation: tool invocation history is not yet persisted back into stored messages, so replayable tool-aware context is future work.
