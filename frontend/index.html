@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Marginalia</title>
+
+  <!-- highlight.js theme -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release/build/styles/github.min.css">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --color-bg: #fafafa;
+      --color-surface: #ffffff;
+      --color-border: #e0e0e0;
+      --color-text: #212121;
+      --color-text-secondary: #616161;
+      --color-primary: #1565c0;
+    }
+
+    ::highlight(marginalia-anchors) { background-color: rgba(255, 213, 79, 0.3); }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--color-text);
+      background: var(--color-bg);
+    }
+
+    body {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      grid-template-columns: 1fr;
+      height: 100vh;
+    }
+
+    /* ── Input Bar ── */
+    #input-bar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    #input-bar input[type="text"] {
+      flex: 1;
+      padding: 10px 14px;
+      font-size: 1rem;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      outline: none;
+    }
+
+    #input-bar input[type="text"]:focus { border-color: var(--color-primary); }
+
+    #input-bar button {
+      padding: 10px 20px;
+      font-size: 1rem;
+      background: var(--color-primary);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    #input-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Content Area (Main + Margin) ── */
+    #content-area {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      overflow: hidden;
+    }
+
+    /* ── Main Column (panel + continuation input) ── */
+    #main-column {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    /* ── Main Panel ── */
+    #main-panel {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 32px;
+      min-width: 0;
+    }
+
+    #main-panel section { margin-bottom: 24px; line-height: 1.7; }
+    #main-panel h1, #main-panel h2, #main-panel h3,
+    #main-panel h4, #main-panel h5, #main-panel h6 { margin-top: 1.2em; margin-bottom: 0.5em; }
+    #main-panel p { margin-bottom: 0.8em; }
+
+    #main-panel pre {
+      background: #f5f5f5;
+      border-radius: 6px;
+      padding: 14px;
+      overflow-x: auto;
+      margin-bottom: 1em;
+    }
+
+    #main-panel code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.9em;
+    }
+
+    #main-panel p code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; }
+
+    /* ── Continuation Input ── */
+    #continuation-area {
+      display: none;
+      padding: 16px 32px;
+      border-top: 1px solid var(--color-border);
+      background: var(--color-surface);
+    }
+
+    #continuation-area.visible { display: flex; gap: 8px; align-items: center; }
+
+    #continuation-area input[type="text"] {
+      flex: 1;
+      padding: 10px 14px;
+      font-size: 0.95rem;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      outline: none;
+    }
+
+    #continuation-area button {
+      padding: 10px 16px;
+      font-size: 0.95rem;
+      background: var(--color-primary);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    #continuation-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Continuation Divider ── */
+    .continuation-divider {
+      border: none;
+      border-top: 1px solid var(--color-border);
+      margin: 24px 0;
+    }
+
+    /* ── Margin Note Panel ── */
+    #margin-note-panel {
+      overflow-y: auto;
+      padding: 16px;
+      border-left: 1px solid var(--color-border);
+      background: var(--color-surface);
+    }
+
+    #margin-note-panel:empty::before {
+      content: "Margin notes will appear here";
+      color: var(--color-text-secondary);
+      font-size: 0.9rem;
+      font-style: italic;
+    }
+
+    /* ── Margin Note ── */
+    .margin-note {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .margin-note-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      background: #f5f7fa;
+      border-bottom: 1px solid var(--color-border);
+      cursor: default;
+    }
+
+    .margin-note-excerpt {
+      flex: 1;
+      font-size: 0.76rem;
+      color: var(--color-primary);
+      cursor: pointer;
+      line-height: 1.3;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      line-clamp: 2;
+      text-decoration: underline dotted;
+    }
+
+    .margin-note-excerpt:hover { color: #0d47a1; }
+
+    .margin-note-toggle {
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: var(--color-text-secondary);
+      padding: 2px 4px;
+      border-radius: 4px;
+      line-height: 1;
+    }
+
+    .margin-note-toggle:hover { background: var(--color-border); }
+
+    .margin-note-body {
+      padding: 8px 10px;
+    }
+
+    .margin-note-body.collapsed { display: none; }
+
+    .margin-note-question {
+      font-size: 0.78rem;
+      color: var(--color-text-secondary);
+      margin-bottom: 6px;
+      font-style: italic;
+    }
+
+    .margin-note-question::before { content: "Q: "; font-weight: 600; }
+
+    .margin-note-response {
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+
+    .margin-note-response h1, .margin-note-response h2,
+    .margin-note-response h3, .margin-note-response h4 {
+      font-size: 0.82rem;
+      margin-top: 0.6em;
+      margin-bottom: 0.3em;
+    }
+
+    .margin-note-response p { margin-bottom: 0.4em; }
+    .margin-note-response ul, .margin-note-response ol { padding-left: 1.2em; margin-bottom: 0.4em; }
+    .margin-note-response li { margin-bottom: 0.15em; }
+    .margin-note-response pre { background: #f5f5f5; border-radius: 4px; padding: 6px 8px; overflow-x: auto; font-size: 0.76rem; margin-bottom: 0.4em; }
+    .margin-note-response code { font-size: 0.78em; }
+    .margin-note-response p code { background: #f0f0f0; padding: 1px 3px; border-radius: 3px; }
+
+    .margin-note-loading {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-primary);
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    .margin-note-error {
+      color: #c62828;
+      padding: 8px;
+      background: #ffebee;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      margin-top: 6px;
+    }
+
+    .margin-note-input {
+      display: flex;
+      gap: 6px;
+      padding: 8px 12px;
+      border-top: 1px solid var(--color-border);
+    }
+
+    .margin-note-input input[type="text"] {
+      flex: 1;
+      padding: 6px 10px;
+      font-size: 0.82rem;
+      border: 1px solid var(--color-border);
+      border-radius: 5px;
+      outline: none;
+    }
+
+    .margin-note-input input[type="text"]:focus { border-color: var(--color-primary); }
+
+    .margin-note-input button {
+      padding: 6px 10px;
+      font-size: 0.82rem;
+      background: var(--color-primary);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .margin-note-input button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Responsive: stacked at ≤1024px ── */
+    @media (max-width: 1024px) {
+      #content-area {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+      }
+
+      #margin-note-panel {
+        border-left: none;
+        border-top: 1px solid var(--color-border);
+        max-height: 40vh;
+      }
+    }
+
+    /* ── Side-by-side: main panel ≥60% ── */
+    @media (min-width: 1025px) {
+      #content-area {
+        grid-template-columns: minmax(60%, 1fr) minmax(280px, 340px);
+      }
+    }
+
+    /* ── Loading indicator ── */
+    .loading-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-primary);
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+    /* ── Text Selection Popover ── */
+    .marginalia-popover {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      padding: 8px;
+      font-size: 0.9rem;
+    }
+
+    .marginalia-popover .ask-btn {
+      background: var(--color-primary);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      white-space: nowrap;
+    }
+
+    .marginalia-popover .ask-btn:hover { opacity: 0.9; }
+
+    .marginalia-popover .side-question-form {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .marginalia-popover .side-question-form input[type="text"] {
+      flex: 1;
+      padding: 6px 10px;
+      font-size: 0.85rem;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      outline: none;
+      min-width: 200px;
+    }
+
+    .marginalia-popover .side-question-form input[type="text"]:focus {
+      border-color: var(--color-primary);
+    }
+
+    .marginalia-popover .side-question-form button {
+      background: var(--color-primary);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+
+    .marginalia-popover .side-question-form button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* ── Settings Button ── */
+    #settings-btn {
+      padding: 10px 12px;
+      font-size: 1.1rem;
+      background: transparent;
+      color: var(--color-text-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      cursor: pointer;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    #settings-btn:hover { background: var(--color-bg); color: var(--color-text); }
+
+    /* ── Settings Dialog ── */
+    #settings-dialog {
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+      padding: 0;
+      max-width: 560px;
+      width: 90vw;
+      max-height: 80vh;
+      overflow: hidden;
+    }
+
+    #settings-dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
+
+    .settings-dialog-inner {
+      display: flex;
+      flex-direction: column;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--color-border);
+      position: sticky;
+      top: 0;
+      background: var(--color-surface);
+      z-index: 1;
+    }
+
+    .settings-header h2 { font-size: 1.1rem; font-weight: 600; }
+
+    .settings-header button {
+      background: none;
+      border: none;
+      font-size: 1.4rem;
+      cursor: pointer;
+      color: var(--color-text-secondary);
+      padding: 4px 8px;
+      border-radius: 4px;
+      line-height: 1;
+    }
+
+    .settings-header button:hover { background: var(--color-bg); }
+
+    .settings-section {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .settings-section:last-child { border-bottom: none; }
+
+    .settings-section h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: var(--color-text);
+    }
+
+    .settings-section textarea {
+      width: 100%;
+      padding: 10px;
+      font-size: 0.88rem;
+      font-family: inherit;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      resize: vertical;
+      outline: none;
+    }
+
+    .settings-section textarea:focus { border-color: var(--color-primary); }
+
+    .settings-section > button {
+      margin-top: 8px;
+      padding: 8px 16px;
+      font-size: 0.88rem;
+      background: var(--color-primary);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .settings-section > button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Settings Lists ── */
+    #skill-file-list, #mcp-server-list {
+      list-style: none;
+      margin-bottom: 10px;
+    }
+
+    #skill-file-list li, #mcp-server-list li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      margin-bottom: 6px;
+      font-size: 0.85rem;
+      background: var(--color-bg);
+    }
+
+    #skill-file-list li .drag-handle,
+    #mcp-server-list li .drag-handle {
+      cursor: grab;
+      color: var(--color-text-secondary);
+      user-select: none;
+      font-size: 0.9rem;
+    }
+
+    #skill-file-list li .item-name,
+    #mcp-server-list li .item-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #mcp-server-list li .item-detail {
+      color: var(--color-text-secondary);
+      font-size: 0.8rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 180px;
+    }
+
+    #skill-file-list li button,
+    #mcp-server-list li button {
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      color: #c62828;
+      cursor: pointer;
+      font-size: 0.85rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    #skill-file-list li button:hover,
+    #mcp-server-list li button:hover { background: #ffebee; }
+
+    /* ── Settings Add Forms ── */
+    .settings-add-form {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .settings-add-form input[type="text"],
+    .settings-add-form textarea {
+      width: 100%;
+      padding: 8px 10px;
+      font-size: 0.85rem;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .settings-add-form input[type="text"]:focus,
+    .settings-add-form textarea:focus { border-color: var(--color-primary); }
+
+    .settings-add-form button {
+      align-self: flex-start;
+      padding: 7px 14px;
+      font-size: 0.85rem;
+      background: var(--color-primary);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .settings-add-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .settings-status {
+      font-size: 0.82rem;
+      padding: 4px 0;
+      min-height: 1.2em;
+    }
+
+    .settings-status.success { color: #2e7d32; }
+    .settings-status.error { color: #c62828; }
+
+    /* ── Anchor connector lines ── */
+    #anchor-connector-svg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+      overflow: visible;
+    }
+
+    #anchor-connector-svg line {
+      stroke: var(--color-primary);
+      stroke-width: 2.5;
+      stroke-dasharray: 6 4;
+      opacity: 0.6;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+  <!-- Input Bar -->
+  <header id="input-bar" role="banner">
+    <label for="question-input" class="sr-only">Ask a question</label>
+    <input type="text" id="question-input" placeholder="Ask a question…" aria-label="Ask a question" autocomplete="off">
+    <button id="ask-btn" type="button">Ask</button>
+    <button id="settings-btn" type="button" aria-label="Open settings" title="Settings">⚙</button>
+  </header>
+
+  <!-- Content Area: Main Panel + Margin Notes -->
+  <div id="content-area">
+    <div id="main-column">
+      <main id="main-panel" role="main" aria-label="Explanation content">
+        <!-- Rendered explanation sections go here -->
+      </main>
+
+      <!-- Continuation Input -->
+      <div id="continuation-area" aria-label="Continue the conversation">
+        <label for="continuation-input" class="sr-only">Continue the conversation</label>
+        <input type="text" id="continuation-input" placeholder="Ask a follow-up question…" aria-label="Continue the conversation" autocomplete="off">
+        <button id="continue-btn" type="button">Continue</button>
+      </div>
+    </div>
+
+    <aside id="margin-note-panel" role="complementary" aria-label="Margin notes">
+      <!-- Margin notes go here -->
+    </aside>
+  </div>
+
+  <!-- Settings Dialog -->
+  <dialog id="settings-dialog" aria-label="Settings">
+    <div class="settings-dialog-inner">
+      <header class="settings-header">
+        <h2>Settings</h2>
+        <button id="settings-close-btn" type="button" aria-label="Close settings">&times;</button>
+      </header>
+
+      <!-- System Prompt Section -->
+      <section class="settings-section">
+        <h3>System Prompt</h3>
+        <textarea id="system-prompt-editor" rows="6" placeholder="Enter system prompt…" aria-label="System prompt"></textarea>
+        <button id="save-system-prompt-btn" type="button">Save Prompt</button>
+      </section>
+
+      <!-- Skill Files Section -->
+      <section class="settings-section">
+        <h3>Skill Files</h3>
+        <ul id="skill-file-list" aria-label="Skill files"></ul>
+        <div class="settings-add-form">
+          <input type="text" id="skill-file-name" placeholder="File name" aria-label="Skill file name">
+          <textarea id="skill-file-content" rows="3" placeholder="Paste text/markdown content…" aria-label="Skill file content"></textarea>
+          <button id="add-skill-file-btn" type="button">Add Skill File</button>
+        </div>
+      </section>
+
+      <!-- MCP Servers Section -->
+      <section class="settings-section">
+        <h3>MCP Servers</h3>
+        <ul id="mcp-server-list" aria-label="MCP servers"></ul>
+        <div class="settings-add-form">
+          <input type="text" id="mcp-server-name" placeholder="Server name" aria-label="MCP server name">
+          <input type="text" id="mcp-server-command" placeholder="Command (e.g. npx)" aria-label="MCP server command">
+          <input type="text" id="mcp-server-args" placeholder="Args (comma-separated)" aria-label="MCP server arguments">
+          <button id="add-mcp-server-btn" type="button">Add MCP Server</button>
+        </div>
+      </section>
+    </div>
+  </dialog>
+
+  <!-- Anchor connector SVG overlay -->
+  <svg id="anchor-connector-svg" aria-hidden="true"></svg>
+
+  <!-- CDN Dependencies -->
+  <script src="https://unpkg.com/@popperjs/core@2"></script>
+  <script src="https://unpkg.com/tippy.js@6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release/build/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+
+  <!-- Application JS -->
+  <script src="app.js"></script>
+</body>
+</html>

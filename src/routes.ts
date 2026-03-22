@@ -1,0 +1,443 @@
+import { Router } from "express";
+import type { Request, Response } from "express";
+import { randomUUID } from "node:crypto";
+import { ConversationStore } from "./conversation-store.js";
+import { MarginaliaAgent } from "./agent.js";
+import { ContextAssembler } from "./context-assembler.js";
+import { submitMainQuestion, submitSideQuestion, submitSideFollowup, submitContinuation } from "./conversation-ops.js";
+import { validateAskBody, validateSideQuestionBody, validateSideFollowupBody, validateContinueBody } from "./validation.js";
+import type { AppConfig } from "./models.js";
+import {
+  initSSE,
+  onClientDisconnect,
+  writeSSEEvent,
+  writeTokenEvent,
+  writeToolUseEvent,
+  writeDoneEvent,
+  writeErrorEvent,
+} from "./sse.js";
+
+interface RouterDeps {
+  store: ConversationStore;
+  agent: MarginaliaAgent;
+  config: AppConfig;
+}
+
+export function createRouter(deps: RouterDeps): Router {
+  const { store, agent, config } = deps;
+  const router = Router();
+
+  router.post("/api/ask", validateAskBody, async (req: Request, res: Response) => {
+    const { question } = req.body;
+
+    try {
+      // Add user message to the main thread
+      submitMainQuestion(store, question);
+
+      // Assemble context for the LLM
+      const conversation = store.getOrCreateConversation();
+      const assembler = new ContextAssembler(config);
+      const contextMessages = assembler.assembleForMain(conversation, question);
+
+      // Set up SSE streaming
+      initSSE(res);
+
+      let disconnected = false;
+      onClientDisconnect(res, () => {
+        disconnected = true;
+      });
+
+      // Stream the agent response
+      let accumulatedContent = "";
+      const toolInvocations: Array<{ toolName: string; input: object; result: string }> = [];
+
+      for await (const event of agent.streamResponse(contextMessages)) {
+        if (disconnected) break;
+
+        switch (event.type) {
+          case "token":
+            accumulatedContent += event.content;
+            writeTokenEvent(res, event.content);
+            break;
+
+          case "tool_use":
+            toolInvocations.push({
+              toolName: event.toolName,
+              input: event.input,
+              result: event.result,
+            });
+            writeToolUseEvent(res, event.toolName, event.input, event.result);
+            break;
+
+          case "done": {
+            const assistantMsg = store.addMainMessage("assistant", accumulatedContent);
+            writeDoneEvent(res, assistantMsg.id);
+            res.end();
+            return;
+          }
+
+          case "error":
+            writeErrorEvent(res, event.message);
+            res.end();
+            return;
+        }
+      }
+
+      // If we exited the loop without a done/error event (e.g. client disconnect),
+      // still store whatever content we accumulated
+      if (!disconnected && accumulatedContent.length > 0) {
+        store.addMainMessage("assistant", accumulatedContent);
+      }
+      if (!disconnected) {
+        res.end();
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Internal server error";
+      // If headers haven't been sent yet, return a JSON error
+      if (!res.headersSent) {
+        res.status(500).json({ error: message });
+      } else {
+        // Headers already sent (SSE mode), write an error event
+        writeErrorEvent(res, message);
+        res.end();
+      }
+    }
+  });
+
+  router.post("/api/side-question", validateSideQuestionBody, async (req: Request, res: Response) => {
+    const { selected_text, question, anchor_position } = req.body;
+
+    try {
+      const { thread } = submitSideQuestion(store, selected_text, question, {
+        messageId: anchor_position.message_id,
+        startOffset: anchor_position.start_offset,
+        endOffset: anchor_position.end_offset,
+      });
+
+      const conversation = store.getOrCreateConversation();
+      const assembler = new ContextAssembler(config);
+      const contextMessages = assembler.assembleForSide(conversation, thread.id, question);
+
+      initSSE(res);
+
+      let disconnected = false;
+      onClientDisconnect(res, () => {
+        disconnected = true;
+      });
+
+      let accumulatedContent = "";
+
+      for await (const event of agent.streamResponse(contextMessages)) {
+        if (disconnected) break;
+
+        switch (event.type) {
+          case "token":
+            accumulatedContent += event.content;
+            writeSSEEvent(res, "token", { content: event.content, thread_id: thread.id });
+            break;
+
+          case "tool_use":
+            writeToolUseEvent(res, event.toolName, event.input, event.result);
+            break;
+
+          case "done": {
+            const assistantMsg = store.addSideMessage(thread.id, "assistant", accumulatedContent);
+            writeSSEEvent(res, "done", { message_id: assistantMsg.id, thread_id: thread.id });
+            res.end();
+            return;
+          }
+
+          case "error":
+            writeErrorEvent(res, event.message);
+            res.end();
+            return;
+        }
+      }
+
+      if (!disconnected && accumulatedContent.length > 0) {
+        store.addSideMessage(thread.id, "assistant", accumulatedContent);
+      }
+      if (!disconnected) {
+        res.end();
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Internal server error";
+      if (!res.headersSent) {
+        res.status(500).json({ error: message });
+      } else {
+        writeErrorEvent(res, message);
+        res.end();
+      }
+    }
+  });
+
+  router.post("/api/side-followup", validateSideFollowupBody, async (req: Request, res: Response) => {
+    const { thread_id, question } = req.body;
+
+    try {
+      submitSideFollowup(store, thread_id, question);
+
+      const conversation = store.getOrCreateConversation();
+      const assembler = new ContextAssembler(config);
+      const contextMessages = assembler.assembleForSide(conversation, thread_id, question);
+
+      initSSE(res);
+
+      let disconnected = false;
+      onClientDisconnect(res, () => {
+        disconnected = true;
+      });
+
+      let accumulatedContent = "";
+
+      for await (const event of agent.streamResponse(contextMessages)) {
+        if (disconnected) break;
+
+        switch (event.type) {
+          case "token":
+            accumulatedContent += event.content;
+            writeSSEEvent(res, "token", { content: event.content, thread_id });
+            break;
+
+          case "tool_use":
+            writeToolUseEvent(res, event.toolName, event.input, event.result);
+            break;
+
+          case "done": {
+            const assistantMsg = store.addSideMessage(thread_id, "assistant", accumulatedContent);
+            writeSSEEvent(res, "done", { message_id: assistantMsg.id, thread_id });
+            res.end();
+            return;
+          }
+
+          case "error":
+            writeErrorEvent(res, event.message);
+            res.end();
+            return;
+        }
+      }
+
+      if (!disconnected && accumulatedContent.length > 0) {
+        store.addSideMessage(thread_id, "assistant", accumulatedContent);
+      }
+      if (!disconnected) {
+        res.end();
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Internal server error";
+      if (!res.headersSent) {
+        res.status(500).json({ error: message });
+      } else {
+        writeErrorEvent(res, message);
+        res.end();
+      }
+    }
+  });
+
+  router.post("/api/continue", validateContinueBody, async (req: Request, res: Response) => {
+    const { question } = req.body;
+
+    try {
+      // Add user message to the main thread
+      submitContinuation(store, question);
+
+      // Assemble full context (main + all side threads)
+      const conversation = store.getOrCreateConversation();
+      const assembler = new ContextAssembler(config);
+      const contextMessages = assembler.assembleForMain(conversation, question);
+
+      // Set up SSE streaming
+      initSSE(res);
+
+      let disconnected = false;
+      onClientDisconnect(res, () => {
+        disconnected = true;
+      });
+
+      // Stream the agent response
+      let accumulatedContent = "";
+
+      for await (const event of agent.streamResponse(contextMessages)) {
+        if (disconnected) break;
+
+        switch (event.type) {
+          case "token":
+            accumulatedContent += event.content;
+            writeTokenEvent(res, event.content);
+            break;
+
+          case "tool_use":
+            writeToolUseEvent(res, event.toolName, event.input, event.result);
+            break;
+
+          case "done": {
+            const assistantMsg = store.addMainMessage("assistant", accumulatedContent);
+            writeDoneEvent(res, assistantMsg.id);
+            res.end();
+            return;
+          }
+
+          case "error":
+            writeErrorEvent(res, event.message);
+            res.end();
+            return;
+        }
+      }
+
+      if (!disconnected && accumulatedContent.length > 0) {
+        store.addMainMessage("assistant", accumulatedContent);
+      }
+      if (!disconnected) {
+        res.end();
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Internal server error";
+      if (!res.headersSent) {
+        res.status(500).json({ error: message });
+      } else {
+        writeErrorEvent(res, message);
+        res.end();
+      }
+    }
+  });
+
+  // --- Settings endpoints ---
+
+  router.get("/api/settings", (_req: Request, res: Response) => {
+    res.json({
+      systemPrompt: config.systemPrompt,
+      bedrockModelId: config.bedrockModelId,
+      skillFiles: config.skillFiles,
+      mcpServers: config.mcpServers,
+    });
+  });
+
+  router.put("/api/settings", (req: Request, res: Response) => {
+    const { systemPrompt, bedrockModelId } = req.body ?? {};
+
+    if (systemPrompt !== undefined) {
+      if (typeof systemPrompt !== "string") {
+        res.status(422).json({ error: "systemPrompt must be a string" });
+        return;
+      }
+      const oldPrompt = config.systemPrompt;
+      config.systemPrompt = systemPrompt;
+      if (systemPrompt !== oldPrompt) {
+        agent.updateSystemPrompt(systemPrompt);
+      }
+    }
+
+    if (bedrockModelId !== undefined) {
+      if (typeof bedrockModelId !== "string" || bedrockModelId.trim().length === 0) {
+        res.status(422).json({ error: "bedrockModelId must be a non-empty string" });
+        return;
+      }
+      config.bedrockModelId = bedrockModelId;
+    }
+
+    res.json({
+      systemPrompt: config.systemPrompt,
+      bedrockModelId: config.bedrockModelId,
+      skillFiles: config.skillFiles,
+      mcpServers: config.mcpServers,
+    });
+  });
+
+  router.post("/api/settings/skill-files", (req: Request, res: Response) => {
+    const { name, content, order } = req.body ?? {};
+
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
+      res.status(422).json({ error: "name must be a non-empty string" });
+      return;
+    }
+
+    if (!content || typeof content !== "string" || content.trim().length === 0) {
+      res.status(422).json({ error: "content must be a non-empty string" });
+      return;
+    }
+
+    // Reject binary content (e.g., files containing null bytes)
+    if (content.includes("\0")) {
+      res.status(422).json({ error: "Skill file content must be readable text, binary files are not allowed" });
+      return;
+    }
+
+    const skillFile = {
+      id: randomUUID(),
+      name: name.trim(),
+      content,
+      order: typeof order === "number" ? order : config.skillFiles.length,
+    };
+
+    config.skillFiles.push(skillFile);
+    res.status(201).json(skillFile);
+  });
+
+  router.delete("/api/settings/skill-files/:id", (req: Request, res: Response) => {
+    const { id } = req.params;
+    const index = config.skillFiles.findIndex((sf) => sf.id === id);
+
+    if (index === -1) {
+      res.status(404).json({ error: "Skill file not found" });
+      return;
+    }
+
+    config.skillFiles.splice(index, 1);
+    res.json({ success: true });
+  });
+
+  router.post("/api/settings/mcp-servers", async (req: Request, res: Response) => {
+    const { name, command, args, env, enabled } = req.body ?? {};
+
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
+      res.status(422).json({ error: "name must be a non-empty string" });
+      return;
+    }
+
+    if (!command || typeof command !== "string" || command.trim().length === 0) {
+      res.status(422).json({ error: "command must be a non-empty string" });
+      return;
+    }
+
+    const mcpServer = {
+      id: randomUUID(),
+      name: name.trim(),
+      command: command.trim(),
+      args: Array.isArray(args) ? args : [],
+      env: env && typeof env === "object" && !Array.isArray(env) ? env : {},
+      enabled: typeof enabled === "boolean" ? enabled : true,
+    };
+
+    config.mcpServers.push(mcpServer);
+
+    try {
+      await agent.configureMcp(config.mcpServers);
+    } catch {
+      // MCP configuration is best-effort; server is still added
+    }
+
+    res.status(201).json(mcpServer);
+  });
+
+  router.delete("/api/settings/mcp-servers/:id", async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const index = config.mcpServers.findIndex((s) => s.id === id);
+
+    if (index === -1) {
+      res.status(404).json({ error: "MCP server config not found" });
+      return;
+    }
+
+    config.mcpServers.splice(index, 1);
+
+    try {
+      await agent.configureMcp(config.mcpServers);
+    } catch {
+      // MCP reconfiguration is best-effort
+    }
+
+    res.json({ success: true });
+  });
+
+  return router;
+}

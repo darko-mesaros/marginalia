@@ -1,0 +1,28 @@
+{
+  "name": "marginalia",
+  "version": "0.1.0",
+  "description": "Web-based LLM explainer tool with margin notes",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "npx tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest --run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@strands-agents/sdk": "^0.7.0",
+    "express": "^5.1.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.21",
+    "@types/uuid": "^10.0.0",
+    "fast-check": "^4.1.1",
+    "marked": "^17.0.5",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.1"
+  }
+}
