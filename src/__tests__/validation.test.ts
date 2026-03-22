@@ -5,7 +5,7 @@ import {
   validateSideQuestionBody,
   validateSideFollowupBody,
   validateContinueBody,
-} from "../validation";
+} from "../validation.js";
 
 /** Helper to create a mock request with a given body. */
 function mockReq(body: unknown): Request {

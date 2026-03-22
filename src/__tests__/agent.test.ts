@@ -214,6 +214,80 @@ describe("MarginaliaAgent", () => {
     });
   });
 
+  it("should pass full assembled context as message array to Strands", async () => {
+    const { Agent } = await import("@strands-agents/sdk");
+    const { MarginaliaAgent } = await import("../agent.js");
+
+    const streamMock = vi.fn().mockReturnValue(
+      (async function* () {
+        yield {
+          type: "modelStreamUpdateEvent" as const,
+          agent: {} as any,
+          event: {
+            type: "modelContentBlockDeltaEvent" as const,
+            delta: { type: "textDelta" as const, text: "Done" },
+          },
+        };
+        return { type: "agentResult" as const, stopReason: "endTurn", lastMessage: {} } as any;
+      })()
+    );
+
+    vi.mocked(Agent).mockImplementation(
+      () =>
+        ({
+          stream: streamMock,
+        }) as any
+    );
+
+    const agent = new MarginaliaAgent(defaultConfig);
+    const inputMessages = [
+      { role: "system" as const, content: "System from assembler" },
+      { role: "user" as const, content: "Original question" },
+      { role: "assistant" as const, content: "Original answer" },
+      { role: "user" as const, content: "Margin note summary" },
+      { role: "assistant" as const, content: "I will keep that in mind." },
+      { role: "user" as const, content: "New follow-up" },
+    ];
+
+    const events: StreamEvent[] = [];
+    for await (const event of agent.streamResponse(inputMessages)) {
+      events.push(event);
+    }
+
+    expect(events.some((event) => event.type === "done")).toBe(true);
+
+    expect(streamMock).toHaveBeenCalledTimes(1);
+    expect(streamMock).toHaveBeenCalledWith([
+      { role: "user", content: [{ text: "Original question" }] },
+      { role: "assistant", content: [{ text: "Original answer" }] },
+      { role: "user", content: [{ text: "Margin note summary" }] },
+      { role: "assistant", content: [{ text: "I will keep that in mind." }] },
+      { role: "user", content: [{ text: "New follow-up" }] },
+    ]);
+
+    const lastAgentCall = vi.mocked(Agent).mock.calls.at(-1)?.[0] as {
+      systemPrompt: string;
+    };
+    expect(lastAgentCall.systemPrompt).toBe("System from assembler");
+  });
+
+  it("should return an error when only system messages are provided", async () => {
+    const { MarginaliaAgent } = await import("../agent.js");
+
+    const agent = new MarginaliaAgent(defaultConfig);
+    const events: StreamEvent[] = [];
+
+    for await (const event of agent.streamResponse([
+      { role: "system", content: "System only" },
+    ])) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([
+      { type: "error", message: "No conversational messages provided" },
+    ]);
+  });
+
   it("should configure MCP servers and rebuild agent", async () => {
     const { Agent, McpClient } = await import("@strands-agents/sdk");
     const { StdioClientTransport } = await import(

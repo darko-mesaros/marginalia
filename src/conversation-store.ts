@@ -8,7 +8,7 @@ import {
   type MessageRole,
   type AnchorPosition,
   type SideThread,
-} from "./models";
+} from "./models.js";
 
 /**
  * In-memory conversation store.

@@ -5,14 +5,14 @@ import {
   createConversation,
   addSideThread,
   type AnchorPosition,
-} from "../models";
-import { ConversationStore } from "../conversation-store";
+} from "../models.js";
+import { ConversationStore } from "../conversation-store.js";
 import {
   submitMainQuestion,
   submitContinuation,
   submitSideQuestion,
   submitSideFollowup,
-} from "../conversation-ops";
+} from "../conversation-ops.js";
 
 // Feature: marginalia, Property 3: Side thread creation preserves anchor data
 // **Validates: Requirements 3.2, 4.3, 5.1**
