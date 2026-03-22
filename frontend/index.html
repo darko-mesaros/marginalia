@@ -71,6 +71,8 @@
 
     #input-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    #app-icon { height: 64px; width: 64px; object-fit: contain; flex-shrink: 0; }
+
     /* ── Content Area (Main + Margin) ── */
     #content-area {
       display: grid;
@@ -628,6 +630,7 @@
 <body>
   <!-- Input Bar -->
   <header id="input-bar" role="banner">
+    <img src="/help.png" alt="Marginalia" id="app-icon">
     <label for="question-input" class="sr-only">Ask a question</label>
     <input type="text" id="question-input" placeholder="Ask a question…" aria-label="Ask a question" autocomplete="off">
     <button id="ask-btn" type="button">Ask</button>
