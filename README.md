@@ -60,7 +60,7 @@ Uses `tsx watch` for auto-reload on file changes.
 npm test
 ```
 
-Runs 133 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across models, context assembly, conversation ops, validation, agent, retry, SSE, routes, layout, and markdown rendering.
+Runs 180 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across models, context assembly, conversation ops, validation, agent, retry, SSE, routes, layout, markdown rendering, and MCP config management.
 
 ## How It Works
 
@@ -79,10 +79,28 @@ Runs 133 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across
 - Vanilla HTML/JS frontend (no build step)
 - marked.js, highlight.js, tippy.js (this one caused me troubl), DOMPurify via CDN
 - CSS Custom Highlight API for text anchoring
-- MCP tool integration via settings UI (work in progress)
+- MCP tool integration via settings UI with persistent config (`./data/mcp.json`)
+
+## MCP Server Configuration
+
+MCP servers can be configured through the settings UI or by editing `./data/mcp.json` directly. The file follows the VS Code/Cursor/Kiro convention:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "@some/mcp-server"],
+      "env": { "API_KEY": "..." },
+      "enabled": true
+    }
+  }
+}
+```
+
+Servers can be enabled/disabled individually without removing them. Config is loaded on startup and saved automatically on every change.
 
 ## TODO
-- [ ] Implement conversation saving
 - [ ] Add support to other model providers
 - [ ] Improve stability (yeah)
 - [ ] The SVG lines get messed all the time up until you scroll

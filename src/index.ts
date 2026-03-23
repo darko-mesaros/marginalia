@@ -7,6 +7,7 @@ import { createRouter } from "./routes.js";
 import { JsonFilePersistenceAdapter } from "./persistence-adapter.js";
 import { ConversationLibrary } from "./conversation-library.js";
 import { TitleGenerator } from "./title-generator.js";
+import { McpConfigManager } from "./mcp-config-manager.js";
 import type { AppConfig } from "./models.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,7 +35,15 @@ const port = parseInt(process.env.PORT ?? "3000", 10);
 
 (async () => {
   await library.init();
-  const router = createRouter({ store, agent, config, library, titleGenerator });
+
+  const mcpConfigManager = new McpConfigManager();
+  config.mcpServers = await mcpConfigManager.load();
+
+  if (config.mcpServers.some(s => s.enabled)) {
+    await agent.configureMcp(config.mcpServers);
+  }
+
+  const router = createRouter({ store, agent, config, library, titleGenerator, mcpConfigManager });
   app.use(router);
   app.use(express.static(path.resolve(__dirname, "..", "frontend")));
 

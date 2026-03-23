@@ -1,22 +1,43 @@
 import { Agent, BedrockModel } from "@strands-agents/sdk";
 
-const TITLE_PROMPT = `You are a title generator. Given a user's question, produce a short descriptive title that summarises the topic. Rules:
-- Return ONLY the title text, nothing else
-- Maximum 60 characters
-- No quotes, no punctuation at the end
-- Be specific and descriptive`;
+const TITLE_PROMPT = `Generate a short title (3-7 words) for the user's question. Output ONLY the title, no explanation. Examples:
+"How does Rust ownership work?" → Rust Ownership Explained
+"Tell me about black holes" → Black Holes Overview
+"How to deploy Lambda with CDK" → Lambda Deployment with CDK`;
 
 /**
  * Process raw model output into a valid title.
- * Trims whitespace, truncates to 60 chars, falls back to "Untitled Conversation" if empty.
+ * Strips markdown formatting, trims whitespace, truncates to 60 chars,
+ * falls back to "Untitled Conversation" if empty.
  */
 export function processTitle(raw: string): string {
-  let title = raw.trim();
+  // Strip markdown formatting before trimming
+  let title = raw;
+  title = title.replace(/<think>[\s\S]*?<\/think>/gi, ""); // thinking tags
+  title = title.replace(/^#{1,6}\s+/gm, "");           // heading markers
+  title = title.replace(/!\[(.+?)\]\(.+?\)/g, "$1");    // images (before links)
+  title = title.replace(/\[(.+?)\]\(.+?\)/g, "$1");     // links
+  title = title.replace(/\*\*(.+?)\*\*/g, "$1");        // bold
+  title = title.replace(/\*(.+?)\*/g, "$1");             // italic (asterisk)
+  title = title.replace(/(?<!\w)_(.+?)_(?!\w)/g, "$1");  // italic (underscore)
+  title = title.replace(/~~(.+?)~~/g, "$1");             // strikethrough
+  title = title.replace(/`(.+?)`/g, "$1");               // inline code
+  title = title.replace(/^>\s?/gm, "");                  // blockquote markers
+  title = title.replace(/^[-*+]\s+/gm, "");              // unordered list markers
+  title = title.replace(/^\d+\.\s+/gm, "");              // ordered list markers
+  title = title.replace(/^["']+|["']+$/g, "");           // surrounding quotes
+  title = title.replace(/\s{2,}/g, " ");                 // collapse multiple spaces
+
+  // Take only the first line — ignore anything after a newline
+  title = title.split("\n")[0].trim();
   if (title.length === 0) {
     title = "Untitled Conversation";
   }
   if (title.length > 60) {
-    title = title.substring(0, 60);
+    // Truncate at the last word boundary before 60 chars
+    const truncated = title.substring(0, 60);
+    const lastSpace = truncated.lastIndexOf(" ");
+    title = lastSpace > 10 ? truncated.substring(0, lastSpace) : truncated;
   }
   return title;
 }

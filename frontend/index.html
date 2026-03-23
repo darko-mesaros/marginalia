@@ -587,6 +587,52 @@
 
     .settings-add-form button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* ── Env Editor ── */
+    .env-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .env-row input[type="text"] {
+      flex: 1;
+      padding: 8px 10px;
+      font-size: 0.85rem;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .env-row input[type="text"]:focus { border-color: var(--color-primary); }
+
+    .env-row button {
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      color: #c62828;
+      cursor: pointer;
+      font-size: 0.95rem;
+      padding: 4px 8px;
+      border-radius: 4px;
+      line-height: 1;
+    }
+
+    .env-row button:hover { background: #ffebee; }
+
+    .env-add-btn {
+      align-self: flex-start;
+      padding: 6px 12px;
+      font-size: 0.82rem;
+      background: transparent;
+      color: var(--color-primary);
+      border: 1px dashed var(--color-primary);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .env-add-btn:hover { background: rgba(21, 101, 192, 0.06); }
+
     .settings-status {
       font-size: 0.82rem;
       padding: 4px 0;
@@ -816,6 +862,8 @@
           <input type="text" id="mcp-server-name" placeholder="Server name" aria-label="MCP server name">
           <input type="text" id="mcp-server-command" placeholder="Command (e.g. npx)" aria-label="MCP server command">
           <input type="text" id="mcp-server-args" placeholder="Args (comma-separated)" aria-label="MCP server arguments">
+          <div id="mcp-env-rows" aria-label="Environment variables"></div>
+          <button type="button" id="add-env-row-btn" class="env-add-btn">+ Add Environment Variable</button>
           <button id="add-mcp-server-btn" type="button">Add MCP Server</button>
         </div>
       </section>

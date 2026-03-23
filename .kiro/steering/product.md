@@ -16,6 +16,9 @@ Marginalia is a web-based LLM explainer tool. Users ask a question, receive a ma
 - Main thread answers are structured markdown with headings, code blocks, examples
 - All threads share context — the LLM is aware of every margin note discussion
 - MCP tool integration is configurable via a settings UI
+- MCP servers can be enabled/disabled individually via a toggle without removing them
+- Tool invocations render as compact inline indicators (`🔧 Used {tool_name}`) — raw tool output is not shown to the user
+- Conversation titles are markdown-stripped (`processTitle()` removes headings, bold, italic, links, etc.) before display
 - Skill files can be added to extend the system prompt
 
 ## API Endpoints
@@ -27,10 +30,13 @@ Marginalia is a web-based LLM explainer tool. Users ask a question, receive a ma
 - `GET /api/conversations` — list saved conversations (returns `ConversationSummary[]` sorted by most recent)
 - `GET /api/conversations/:id` — load a saved conversation (replaces active conversation in store)
 - `POST /api/conversations/new` — start a fresh conversation (cleans up empty ones)
+- `PATCH /api/settings/mcp-servers/:id` — toggle an MCP server's enabled state (`{ "enabled": bool }`)
 
 ## Persistence
 
 Conversations are auto-saved to `./data/conversations/{id}.json` after every message. Each conversation has a `title` (generated asynchronously from the first question via a separate Bedrock model call) and an `updatedAt` timestamp bumped on every mutation.
+
+MCP server configurations are persisted to `./data/mcp.json` in a VS Code-compatible format (top-level `mcpServers` map keyed by name). The file is loaded on startup and written atomically on every add/remove/toggle. Servers can be enabled or disabled without removal.
 
 ## Conversation Library UI
 

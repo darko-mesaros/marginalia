@@ -1,0 +1,93 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration tests
+  - **Property 1: Bug Condition** - Tool Output Rendered as Blockquote & Title Markdown Pass-Through
+  - **CRITICAL**: These tests MUST FAIL on unfixed code — failure confirms the bugs exist
+  - **DO NOT attempt to fix the tests or the code when they fail**
+  - **NOTE**: These tests encode the expected behavior — they will validate the fix when they pass after implementation
+  - **GOAL**: Surface counterexamples that demonstrate both bugs exist
+  - **Bug 1 — Tool display**: Write a test that constructs the tool_use event handler string using the current blockquote template (`\n\n> **Tool:** ${tool_name}\n> **Result:** ${result}\n\n`) and asserts it should NOT contain the raw result and SHOULD match the compact indicator format `\n\n🔧 Used ${tool_name}\n\n`. This will FAIL on unfixed code because the current template includes the raw result.
+  - **Bug 2 — Title markdown**: Write property-based tests using fast-check that generate strings with markdown formatting (headings `# `, bold `**...**`, italic `*...*`/`_..._`, strikethrough `~~...~~`, inline code `` `...` ``, links `[text](url)`, images `![alt](url)`, blockquotes `> `, list markers `- `, `* `, `+ `, `1. `) and assert `processTitle()` returns a string with no markdown syntax remaining. This will FAIL on unfixed code because `processTitle()` only trims and truncates.
+  - **Scoped PBT Approach**: For the title bug, scope the property to strings that contain at least one markdown pattern. For the tool display bug, scope to any non-empty tool name and result string.
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests FAIL (this is correct — it proves the bugs exist)
+  - Document counterexamples found (e.g., `processTitle("# Heading")` returns `# Heading` instead of `Heading`; tool indicator string contains raw result text)
+  - Mark task complete when tests are written, run, and failure is documented
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.4_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Plain Text Titles Unchanged & Token Streaming Unchanged
+  - **IMPORTANT**: Follow observation-first methodology
+  - **Observe on UNFIXED code first**:
+    - `processTitle("Simple Title")` returns `"Simple Title"`
+    - `processTitle("")` returns `"Untitled Conversation"`
+    - `processTitle("   ")` returns `"Untitled Conversation"`
+    - `processTitle("a".repeat(100))` returns a 60-character string equal to `"a".repeat(60)`
+    - `processTitle("  Hello World  ")` returns `"Hello World"`
+  - **Property 2a — Plain text title preservation**: Write a property-based test using fast-check that generates arbitrary strings containing NO markdown formatting characters (no `#`, `*`, `_`, `~`, `` ` ``, `[`, `]`, `(`, `)`, `!`, `>` at pattern-significant positions, no `- `/`+ `/`1. ` at line starts). Assert that `processTitle(input)` on the fixed code produces the same result as the original implementation (trim + truncate to 60 + fallback to "Untitled Conversation"). Verify this test PASSES on unfixed code.
+  - **Property 2b — Token event string accumulation**: Write a test verifying that for any token event `{ event: "token", data: { content: "some text" } }`, the accumulation pattern `accumulatedContent += evt.data.content` remains unchanged. This is a structural assertion on the code pattern — verify it holds on unfixed code.
+  - **Property 2c — Title length invariant**: The existing Property 4 test in `src/__tests__/title-generator.test.ts` already asserts `processTitle()` always returns a non-empty string of at most 60 characters. Verify this test PASSES on unfixed code (it should, since the fix only adds stripping before the existing trim/truncate logic).
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.3_
+
+- [x] 3. Fix tool display rendering and title markdown stripping
+
+  - [x] 3.1 Implement title markdown stripping in `processTitle()`
+    - In `src/title-generator.ts`, add a markdown-stripping step at the beginning of `processTitle()` BEFORE the existing `trim()` call
+    - Strip heading markers: replace `/^#{1,6}\s+/gm` with `""`
+    - Strip bold: replace `/\*\*(.+?)\*\*/g` with `"$1"`
+    - Strip italic (asterisk): replace `/\*(.+?)\*/g` with `"$1"`
+    - Strip italic (underscore): replace `/(?<!\w)_(.+?)_(?!\w)/g` with `"$1"`
+    - Strip strikethrough: replace `/~~(.+?)~~/g` with `"$1"`
+    - Strip inline code: replace `/`(.+?)`/g` with `"$1"`
+    - Strip links: replace `/\[(.+?)\]\(.+?\)/g` with `"$1"`
+    - Strip images: replace `/!\[(.+?)\]\(.+?\)/g` with `"$1"` (before link stripping)
+    - Strip blockquote markers: replace `/^>\s?/gm` with `""`
+    - Strip unordered list markers: replace `/^[-*+]\s+/gm` with `""`
+    - Strip ordered list markers: replace `/^\d+\.\s+/gm` with `""`
+    - Collapse multiple spaces: replace `/\s{2,}/g` with `" "`
+    - Preserve existing trim + truncate + fallback logic after stripping
+    - _Bug_Condition: isBugCondition_TitleMarkdown(input) where input contains markdown formatting characters_
+    - _Expected_Behavior: processTitle(input) returns plain text with all markdown syntax removed, trimmed, truncated to 60 chars_
+    - _Preservation: Plain text inputs (no markdown) must produce identical output to the original implementation_
+    - _Requirements: 2.4, 3.3_
+
+  - [x] 3.2 Replace tool_use blockquote with compact indicator in `frontend/app.js`
+    - In `submitQuestion()` main loop (around line 620): replace blockquote template with `const toolInfo = \`\n\n🔧 Used ${evt.data.tool_name}\n\n\`;`
+    - In `submitQuestion()` buffer processing (around line 660): same replacement
+    - In `submitContinuation()` main loop (around line 730): same replacement
+    - In `submitContinuation()` buffer processing (around line 770): same replacement
+    - In `submitSideQuestion()` main loop (around line 1340): same replacement
+    - In `submitSideQuestion()` buffer processing (around line 1390): same replacement
+    - In `submitSideFollowup()` main loop (around line 1510): same replacement
+    - In `submitSideFollowup()` buffer processing (around line 1550): same replacement
+    - All 8 occurrences must be changed from: `const toolInfo = \`\n\n> **Tool:** ${evt.data.tool_name}\n> **Result:** ${evt.data.result || "..."}\n\n\`;` to: `const toolInfo = \`\n\n🔧 Used ${evt.data.tool_name}\n\n\`;`
+    - _Bug_Condition: isBugCondition_ToolDisplay(input) where input is a tool_use SSE event_
+    - _Expected_Behavior: accumulatedContent contains only tool name indicator, not raw result_
+    - _Preservation: Token events, done events, error events, title events remain unchanged_
+    - _Requirements: 2.1, 2.2, 2.3, 3.1, 3.2, 3.4, 3.5_
+
+  - [x] 3.3 Verify bug condition exploration tests now pass
+    - **Property 1: Expected Behavior** - Tool Output Compact Indicator & Title Markdown Stripped
+    - **IMPORTANT**: Re-run the SAME tests from task 1 — do NOT write new tests
+    - The tests from task 1 encode the expected behavior
+    - When these tests pass, it confirms the expected behavior is satisfied
+    - Run bug condition exploration tests from step 1
+    - **EXPECTED OUTCOME**: Tests PASS (confirms bugs are fixed)
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+
+  - [x] 3.4 Verify preservation tests still pass
+    - **Property 2: Preservation** - Plain Text Titles Unchanged & Token Streaming Unchanged
+    - **IMPORTANT**: Re-run the SAME tests from task 2 — do NOT write new tests
+    - Run preservation property tests from step 2
+    - Also run the existing Property 4 title length invariant test
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Confirm all tests still pass after fix (no regressions)
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Run `npm test` to execute the full test suite
+  - Ensure all property-based tests pass (Properties 1, 2, and existing Property 4)
+  - Ensure no regressions in any other test files
+  - Ask the user if questions arise

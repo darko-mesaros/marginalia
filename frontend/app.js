@@ -645,7 +645,7 @@ async function submitQuestion(question) {
             case "tool_use": {
               removeLoading(section);
               // Append tool invocation info to the accumulated content
-              const toolInfo = `\n\n> **Tool:** ${evt.data.tool_name}\n> **Result:** ${evt.data.result || "..."}\n\n`;
+              const toolInfo = `\n\n🔧 Used ${evt.data.tool_name}\n\n`;
               accumulatedContent += toolInfo;
               section.innerHTML = renderMarkdown(accumulatedContent);
               break;
@@ -831,7 +831,7 @@ async function submitContinuation(question) {
 
             case "tool_use": {
               removeLoading(section);
-              const toolInfo = `\n\n> **Tool:** ${evt.data.tool_name}\n> **Result:** ${evt.data.result || "..."}\n\n`;
+              const toolInfo = `\n\n🔧 Used ${evt.data.tool_name}\n\n`;
               accumulatedContent += toolInfo;
               section.innerHTML = renderMarkdown(accumulatedContent);
               break;
@@ -1329,7 +1329,7 @@ async function submitSideQuestion(selectedText, question, anchorPosition) {
             }
           } else if (evt.event === "tool_use") {
             removeMarginNoteLoading(noteUI.responseEl);
-            const toolInfo = `\n\n> **Tool:** ${evt.data.tool_name}\n> **Result:** ${evt.data.result || "..."}\n\n`;
+            const toolInfo = `\n\n🔧 Used ${evt.data.tool_name}\n\n`;
             accumulatedContent += toolInfo;
             noteUI.responseEl.innerHTML = renderMarkdown(accumulatedContent);
           } else if (evt.event === "done") {
@@ -1388,7 +1388,7 @@ async function submitSideQuestion(selectedText, question, anchorPosition) {
           }
         } else if (evt.event === "tool_use") {
           removeMarginNoteLoading(noteUI.responseEl);
-          const toolInfo = `\n\n> **Tool:** ${evt.data.tool_name}\n> **Result:** ${evt.data.result || "..."}\n\n`;
+          const toolInfo = `\n\n🔧 Used ${evt.data.tool_name}\n\n`;
           accumulatedContent += toolInfo;
           noteUI.responseEl.innerHTML = renderMarkdown(accumulatedContent);
         } else if (evt.event === "done") {
@@ -1506,7 +1506,7 @@ async function submitSideFollowup(threadId, question, noteUI) {
             responseEl.innerHTML = renderMarkdown(accumulatedContent);
           } else if (evt.event === "tool_use") {
             removeMarginNoteLoading(responseEl);
-            const toolInfo = `\n\n> **Tool:** ${evt.data.tool_name}\n> **Result:** ${evt.data.result || "..."}\n\n`;
+            const toolInfo = `\n\n🔧 Used ${evt.data.tool_name}\n\n`;
             accumulatedContent += toolInfo;
             responseEl.innerHTML = renderMarkdown(accumulatedContent);
           } else if (evt.event === "done") {
@@ -1540,7 +1540,7 @@ async function submitSideFollowup(threadId, question, noteUI) {
           responseEl.innerHTML = renderMarkdown(accumulatedContent);
         } else if (evt.event === "tool_use") {
           removeMarginNoteLoading(responseEl);
-          const toolInfo = `\n\n> **Tool:** ${evt.data.tool_name}\n> **Result:** ${evt.data.result || "..."}\n\n`;
+          const toolInfo = `\n\n🔧 Used ${evt.data.tool_name}\n\n`;
           accumulatedContent += toolInfo;
           responseEl.innerHTML = renderMarkdown(accumulatedContent);
         } else if (evt.event === "done") {
@@ -2007,6 +2007,64 @@ async function reorderSkillFiles(draggedId, targetId) {
   renderSkillFileList();
 }
 
+// ── MCP Servers — Env Editor ──
+
+/**
+ * Append a new environment variable key/value row to #mcp-env-rows.
+ */
+function addEnvRow() {
+  const container = document.getElementById("mcp-env-rows");
+  const row = document.createElement("div");
+  row.className = "env-row";
+
+  const keyInput = document.createElement("input");
+  keyInput.type = "text";
+  keyInput.className = "env-key";
+  keyInput.placeholder = "KEY";
+
+  const valueInput = document.createElement("input");
+  valueInput.type = "text";
+  valueInput.className = "env-value";
+  valueInput.placeholder = "Value";
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.textContent = "\u00d7";
+  removeBtn.setAttribute("aria-label", "Remove environment variable");
+  removeBtn.addEventListener("click", () => row.remove());
+
+  row.appendChild(keyInput);
+  row.appendChild(valueInput);
+  row.appendChild(removeBtn);
+  container.appendChild(row);
+}
+
+/**
+ * Collect all env key/value pairs from the DOM rows.
+ * Skips rows with empty keys. For duplicate keys, last value wins.
+ * @returns {Record<string, string>}
+ */
+function collectEnvVars() {
+  const rows = document.querySelectorAll("#mcp-env-rows .env-row");
+  const env = {};
+  for (const row of rows) {
+    const key = row.querySelector(".env-key").value.trim();
+    const value = row.querySelector(".env-value").value;
+    if (key) {
+      env[key] = value;
+    }
+  }
+  return env;
+}
+
+/**
+ * Remove all env rows from the container.
+ */
+function clearEnvRows() {
+  const container = document.getElementById("mcp-env-rows");
+  container.innerHTML = "";
+}
+
 // ── MCP Servers ──
 
 function renderMcpServerList() {
@@ -2014,6 +2072,15 @@ function renderMcpServerList() {
   for (const srv of state.settings.mcpServers) {
     const li = document.createElement("li");
     li.dataset.id = srv.id;
+    if (srv.enabled === false) {
+      li.style.opacity = "0.5";
+    }
+
+    const toggle = document.createElement("input");
+    toggle.type = "checkbox";
+    toggle.checked = srv.enabled !== false;
+    toggle.setAttribute("aria-label", `Enable/Disable ${srv.name}`);
+    toggle.addEventListener("change", () => toggleMcpServer(srv.id, toggle.checked));
 
     const name = document.createElement("span");
     name.className = "item-name";
@@ -2022,7 +2089,12 @@ function renderMcpServerList() {
     const detail = document.createElement("span");
     detail.className = "item-detail";
     const argsStr = Array.isArray(srv.args) ? srv.args.join(" ") : (srv.args || "");
-    detail.textContent = `${srv.command || ""} ${argsStr}`.trim();
+    let detailText = `${srv.command || ""} ${argsStr}`.trim();
+    const envCount = srv.env && typeof srv.env === "object" ? Object.keys(srv.env).length : 0;
+    if (envCount > 0) {
+      detailText += ` · ${envCount} env var${envCount === 1 ? "" : "s"}`;
+    }
+    detail.textContent = detailText;
     detail.title = detail.textContent;
 
     const removeBtn = document.createElement("button");
@@ -2031,6 +2103,7 @@ function renderMcpServerList() {
     removeBtn.setAttribute("aria-label", `Remove ${srv.name}`);
     removeBtn.addEventListener("click", () => removeMcpServer(srv.id));
 
+    li.appendChild(toggle);
     li.appendChild(name);
     li.appendChild(detail);
     li.appendChild(removeBtn);
@@ -2059,7 +2132,7 @@ async function addMcpServer() {
     const res = await fetch("/api/settings/mcp-servers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, command, args, env: {}, enabled: true }),
+      body: JSON.stringify({ name, command, args, env: collectEnvVars(), enabled: true }),
     });
     if (!res.ok) {
       const errText = await res.text();
@@ -2071,6 +2144,7 @@ async function addMcpServer() {
     mcpServerNameInput.value = "";
     mcpServerCommandInput.value = "";
     mcpServerArgsInput.value = "";
+    clearEnvRows();
     showSettingsStatus(addMcpServerBtn, "Added!", "success");
   } catch (err) {
     showSettingsStatus(addMcpServerBtn, err.message, "error");
@@ -2087,6 +2161,26 @@ async function removeMcpServer(id) {
     renderMcpServerList();
   } catch (err) {
     console.error("Failed to remove MCP server:", err);
+  }
+}
+
+async function toggleMcpServer(id, enabled) {
+  try {
+    const res = await fetch(`/api/settings/mcp-servers/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!res.ok) throw new Error(`Toggle failed (${res.status})`);
+    const updated = await res.json();
+    const idx = state.settings.mcpServers.findIndex((s) => s.id === id);
+    if (idx !== -1) {
+      state.settings.mcpServers[idx] = updated;
+    }
+    renderMcpServerList();
+  } catch (err) {
+    console.error("Failed to toggle MCP server:", err);
+    renderMcpServerList();
   }
 }
 
@@ -2124,3 +2218,4 @@ settingsDialog.addEventListener("click", (e) => {
 saveSystemPromptBtn.addEventListener("click", saveSystemPrompt);
 addSkillFileBtn.addEventListener("click", addSkillFile);
 addMcpServerBtn.addEventListener("click", addMcpServer);
+document.getElementById("add-env-row-btn").addEventListener("click", addEnvRow);

@@ -10,6 +10,7 @@ import type { AppConfig } from "./models.js";
 import { LibraryError } from "./conversation-library.js";
 import type { ConversationLibrary } from "./conversation-library.js";
 import type { TitleGenerator } from "./title-generator.js";
+import type { McpConfigManager } from "./mcp-config-manager.js";
 import {
   initSSE,
   onClientDisconnect,
@@ -26,10 +27,11 @@ interface RouterDeps {
   config: AppConfig;
   library: ConversationLibrary;
   titleGenerator: TitleGenerator;
+  mcpConfigManager: McpConfigManager;
 }
 
 export function createRouter(deps: RouterDeps): Router {
-  const { store, agent, config, library, titleGenerator } = deps;
+  const { store, agent, config, library, titleGenerator, mcpConfigManager } = deps;
   const router = Router();
 
   router.post("/api/ask", validateAskBody, async (req: Request, res: Response) => {
@@ -466,12 +468,33 @@ export function createRouter(deps: RouterDeps): Router {
       return;
     }
 
+    // Validate env field
+    let sanitizedEnv: Record<string, string> = {};
+    if (env !== undefined) {
+      if (typeof env !== "object" || env === null || Array.isArray(env)) {
+        res.status(422).json({ error: "env must be a plain object" });
+        return;
+      }
+      for (const val of Object.values(env as Record<string, unknown>)) {
+        if (typeof val !== "string") {
+          res.status(422).json({ error: "All env values must be strings" });
+          return;
+        }
+      }
+      // Strip entries where the key is an empty string (after trim)
+      for (const [key, val] of Object.entries(env as Record<string, string>)) {
+        if (key.trim().length > 0) {
+          sanitizedEnv[key] = val;
+        }
+      }
+    }
+
     const mcpServer = {
       id: randomUUID(),
       name: name.trim(),
       command: command.trim(),
       args: Array.isArray(args) ? args : [],
-      env: env && typeof env === "object" && !Array.isArray(env) ? env : {},
+      env: sanitizedEnv,
       enabled: typeof enabled === "boolean" ? enabled : true,
     };
 
@@ -483,7 +506,38 @@ export function createRouter(deps: RouterDeps): Router {
       // MCP configuration is best-effort; server is still added
     }
 
+    mcpConfigManager.save(config.mcpServers).catch(err => console.error("[routes] MCP config save failed:", err));
+
     res.status(201).json(mcpServer);
+  });
+
+  router.patch("/api/settings/mcp-servers/:id", async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { enabled } = req.body ?? {};
+
+    if (typeof enabled !== "boolean") {
+      res.status(422).json({ error: "enabled must be a boolean" });
+      return;
+    }
+
+    const server = config.mcpServers.find((s) => s.id === id);
+
+    if (!server) {
+      res.status(404).json({ error: "MCP server config not found" });
+      return;
+    }
+
+    server.enabled = enabled;
+
+    try {
+      await agent.configureMcp(config.mcpServers);
+    } catch {
+      // MCP reconfiguration is best-effort
+    }
+
+    mcpConfigManager.save(config.mcpServers).catch(err => console.error("[routes] MCP config save failed:", err));
+
+    res.json(server);
   });
 
   router.delete("/api/settings/mcp-servers/:id", async (req: Request, res: Response) => {
@@ -502,6 +556,8 @@ export function createRouter(deps: RouterDeps): Router {
     } catch {
       // MCP reconfiguration is best-effort
     }
+
+    mcpConfigManager.save(config.mcpServers).catch(err => console.error("[routes] MCP config save failed:", err));
 
     res.json({ success: true });
   });
