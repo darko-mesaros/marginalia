@@ -163,6 +163,7 @@ function toggleSidebar() {
   if (isOpen) {
     fetchConversationList();
   }
+  markConnectorsDirty();
 }
 
 sidebarToggleBtn.addEventListener("click", toggleSidebar);
@@ -478,7 +479,7 @@ async function loadConversation(id) {
     }
 
     // Redraw connector lines after all notes and highlights are rendered
-    drawAnchorConnectors();
+    markConnectorsDirty();
 
   } catch (err) {
     // On non-404 error: show error, don't modify current state
@@ -1365,7 +1366,7 @@ async function submitSideQuestion(selectedText, question, anchorPosition) {
 
             // Re-layout margin notes after new note is fully rendered
             layoutMarginNotes();
-            drawAnchorConnectors();
+            markConnectorsDirty();
             fetchConversationList();
           } else if (evt.event === "error") {
             const errMsg = evt.data.message || evt.data || "An error occurred";
@@ -1418,7 +1419,7 @@ async function submitSideQuestion(selectedText, question, anchorPosition) {
 
           // Re-layout margin notes after new note is fully rendered
           layoutMarginNotes();
-          drawAnchorConnectors();
+          markConnectorsDirty();
           fetchConversationList();
         } else if (evt.event === "error") {
           showMarginNoteError(noteUI.responseEl, evt.data.message || evt.data || "An error occurred");
@@ -1690,28 +1691,40 @@ function layoutMarginNotes() {
   marginNotePanel.style.minHeight = "";
 }
 
-/** Debounce helper. */
-function debounce(fn, ms) {
-  let timer;
-  return function (...args) {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn.apply(this, args), ms);
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Anchor connector lines
 // ---------------------------------------------------------------------------
 
 const connectorSvg = document.getElementById("anchor-connector-svg");
 
+/** Map of threadId → SVG <path> element for reuse (Task 2.3) */
+const connectorPaths = new Map();
+
+/** Dirty flag — set by event listeners, cleared after redraw (Task 3.1) */
+let connectorsDirty = true;
+
+/** rAF handle for cleanup if needed */
+let connectorRafId = null;
+
+/** Set the dirty flag so the next rAF frame redraws connectors (Task 3.1) */
+function markConnectorsDirty() {
+  connectorsDirty = true;
+}
+
 /**
- * Draw dashed lines from each margin note's left edge to the midpoint of
- * its highlighted anchor text in the main panel.
- * Uses fixed-position coordinates so it works regardless of scroll.
+ * Batch-read DOM positions, compute Bézier paths, batch-write SVG attributes.
+ * Handles element reuse (Task 2.3), visibility culling (Task 4), and
+ * read-then-write batching (Task 5).
  */
-function drawAnchorConnectors() {
-  connectorSvg.innerHTML = "";
+function updateConnectors() {
+  // ── READ PHASE (Task 5.1) ──
+  // Collect all measurements before any DOM writes.
+
+  const mainRect = mainPanel.getBoundingClientRect();
+  const marginRect = marginNotePanel.getBoundingClientRect();
+
+  const measurements = []; // { threadId, x1, y1, x2, y2, noteVisible }
+  const activeThreadIds = new Set();
 
   const notes = marginNotePanel.querySelectorAll(".margin-note");
   for (const note of notes) {
@@ -1721,60 +1734,130 @@ function drawAnchorConnectors() {
     const sideThread = state.conversation.sideThreads.find((t) => t.id === threadId);
     if (!sideThread) continue;
 
+    // Left edge of the note header (where the line ends)
+    const noteRect = note.getBoundingClientRect();
+    const noteVisible = isRectInViewport(noteRect, marginRect);
+
+    // If the note is off-screen, skip entirely
+    if (!noteVisible) {
+      activeThreadIds.add(threadId);
+      measurements.push({ threadId, x1: 0, y1: 0, x2: 0, y2: 0, noteVisible: false });
+      continue;
+    }
+
+    const x2 = noteRect.left;
+    const y2 = noteRect.top + 20; // ~top of header
+
     // Find the highlighted anchor range in the main panel
     const section = mainPanel.querySelector(
       `section[data-message-id="${sideThread.anchor.messageId}"]`
     );
-    if (!section) continue;
 
-    // Walk text nodes to find the anchor rect
-    const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT);
-    let charCount = 0;
     let anchorRect = null;
-    const { startOffset, endOffset } = sideThread.anchor;
+    if (section) {
+      const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT);
+      let charCount = 0;
+      const { startOffset, endOffset } = sideThread.anchor;
 
-    while (walker.nextNode()) {
-      const node = walker.currentNode;
-      const len = node.textContent.length;
-      if (!anchorRect && charCount + len > startOffset) {
-        const range = document.createRange();
-        range.setStart(node, startOffset - charCount);
-        const endNode = node;
-        const endOff = Math.min(endOffset - charCount, len);
-        range.setEnd(endNode, endOff);
-        const rects = range.getClientRects();
-        if (rects.length > 0) {
-          anchorRect = rects[0];
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        const len = node.textContent.length;
+        if (charCount + len > startOffset) {
+          const range = document.createRange();
+          range.setStart(node, startOffset - charCount);
+          const endOff = Math.min(endOffset - charCount, len);
+          range.setEnd(node, endOff);
+          const rects = range.getClientRects();
+          if (rects.length > 0) {
+            anchorRect = rects[0];
+          }
+          break;
         }
-        break;
+        charCount += len;
       }
-      charCount += len;
     }
 
-    if (!anchorRect) continue;
+    let x1, y1;
+    if (anchorRect && isRectInViewport(anchorRect, mainRect)) {
+      // Anchor is visible — use its actual position
+      x1 = anchorRect.right;
+      y1 = anchorRect.top + anchorRect.height / 2;
+    } else if (anchorRect) {
+      // Anchor exists but is off-screen — keep original x so the vertical
+      // column stays in the same place; only clamp y to viewport edge.
+      x1 = anchorRect.right;
+      y1 = anchorRect.top + anchorRect.height / 2;
+      if (y1 < mainRect.top) y1 = mainRect.top;
+      if (y1 > mainRect.bottom) y1 = mainRect.bottom;
+    } else {
+      // Anchor rect not found — use main panel right edge, same Y as note
+      x1 = mainRect.right;
+      y1 = y2;
+    }
 
-    // Right edge of the anchor text (where the line starts)
-    const x1 = anchorRect.right;
-    const y1 = anchorRect.top + anchorRect.height / 2;
+    activeThreadIds.add(threadId);
+    measurements.push({ threadId, x1, y1, x2, y2, noteVisible: true });
+  }
 
-    // Left edge of the note header (where the line ends)
-    const noteRect = note.getBoundingClientRect();
-    const x2 = noteRect.left;
-    const y2 = noteRect.top + 20; // ~top of header
+  // ── WRITE PHASE (Task 5.2) ──
+  // Create/update/hide SVG path elements using collected measurements.
 
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", x1);
-    line.setAttribute("y1", y1);
-    line.setAttribute("x2", x2);
-    line.setAttribute("y2", y2);
-    connectorSvg.appendChild(line);
+  for (const m of measurements) {
+    let path = connectorPaths.get(m.threadId);
+
+    // Create new path element if needed (Task 2.3)
+    if (!path) {
+      path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      connectorSvg.appendChild(path);
+      connectorPaths.set(m.threadId, path);
+    }
+
+    if (!m.noteVisible) {
+      path.setAttribute("display", "none");
+    } else {
+      path.removeAttribute("display");
+      const d = computeBezierPath(m.x1, m.y1, m.x2, m.y2);
+      path.setAttribute("d", d);
+    }
+  }
+
+  // Remove stale paths for threads no longer present (Task 2.3)
+  for (const [threadId, path] of connectorPaths) {
+    if (!activeThreadIds.has(threadId)) {
+      path.remove();
+      connectorPaths.delete(threadId);
+    }
   }
 }
 
-// Redraw on scroll and resize
-mainPanel.addEventListener("scroll", debounce(drawAnchorConnectors, 50));
-marginNotePanel.addEventListener("scroll", debounce(drawAnchorConnectors, 50));
-window.addEventListener("resize", debounce(drawAnchorConnectors, 100));
+/**
+ * rAF loop — checks dirty flag each frame, redraws when needed (Task 3.2).
+ */
+function connectorLoop() {
+  if (connectorsDirty) {
+    connectorsDirty = false;
+    try {
+      updateConnectors();
+    } catch (e) {
+      // Connector rendering is non-critical; log and continue
+      console.error("Connector update error:", e);
+    }
+  }
+  connectorRafId = requestAnimationFrame(connectorLoop);
+}
+
+/** Start the rAF loop. Called once on page load (Task 3.3). */
+function startConnectorLoop() {
+  connectorRafId = requestAnimationFrame(connectorLoop);
+}
+
+// Kick off the connector loop (Task 3.3)
+startConnectorLoop();
+
+// Scroll and resize listeners set dirty flag instead of debouncing (Task 3.4)
+mainPanel.addEventListener("scroll", markConnectorsDirty, { passive: true });
+marginNotePanel.addEventListener("scroll", markConnectorsDirty, { passive: true });
+window.addEventListener("resize", markConnectorsDirty);
 
 // Dismiss popover when clicking outside the main panel and outside the popover
 document.addEventListener("mousedown", (e) => {

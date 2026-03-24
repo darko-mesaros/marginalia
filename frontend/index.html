@@ -654,7 +654,8 @@
       overflow: visible;
     }
 
-    #anchor-connector-svg line {
+    #anchor-connector-svg path {
+      fill: none;
       stroke: var(--color-primary);
       stroke-width: 2.5;
       stroke-dasharray: 6 4;
@@ -879,6 +880,9 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release/build/highlight.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+
+  <!-- Connector math (pure functions, no DOM deps) -->
+  <script src="connector-math.js"></script>
 
   <!-- Application JS -->
   <script src="app.js"></script>
