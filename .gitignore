@@ -29,3 +29,5 @@ Thumbs.db
 # Kiro internal state
 .kiro/**/.config.kiro
 
+# Data
+data/
