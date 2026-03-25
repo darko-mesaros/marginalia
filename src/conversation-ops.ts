@@ -53,7 +53,7 @@ export function submitSideQuestion(
     throw new ValidationError("Selected text must not be empty");
   }
 
-  if (anchorPosition.startOffset >= anchorPosition.endOffset) {
+  if (anchorPosition.startOffset > anchorPosition.endOffset) {
     throw new ValidationError(
       "Invalid anchor position: start offset must be less than end offset"
     );

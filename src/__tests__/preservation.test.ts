@@ -113,3 +113,322 @@ describe("Preservation Properties", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bug 3 — Double-click anchor offset: Preservation of non-equal-offset behavior
+// These tests MUST PASS on unfixed code — they confirm baseline behavior
+// that must not regress after the >= to > fix is applied.
+//
+// Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
+// ---------------------------------------------------------------------------
+
+import { validateSideQuestionBody } from "../validation.js";
+import { submitSideQuestion, ValidationError } from "../conversation-ops.js";
+import { ConversationStore } from "../conversation-store.js";
+import type { Request, Response, NextFunction } from "express";
+import { vi, beforeEach } from "vitest";
+
+function mockReq(body: unknown): Request {
+  return { body } as unknown as Request;
+}
+
+function mockRes() {
+  const res = {
+    statusCode: 0,
+    jsonBody: null as unknown,
+    status(code: number) { res.statusCode = code; return res; },
+    json(body: unknown) { res.jsonBody = body; return res; },
+  };
+  return res as unknown as Response & { statusCode: number; jsonBody: unknown };
+}
+
+describe("Bug 3 — Preservation: Non-Equal Offset Behavior Unchanged", () => {
+  let store: ConversationStore;
+
+  beforeEach(() => {
+    store = new ConversationStore();
+  });
+
+  // -----------------------------------------------------------------------
+  // Observation tests — specific examples on UNFIXED code
+  // -----------------------------------------------------------------------
+
+  it("Observation: validateSideQuestionBody accepts start_offset:0, end_offset:9\n  Validates: Requirements 3.1", () => {
+    const next = vi.fn();
+    const res = mockRes();
+    validateSideQuestionBody(
+      mockReq({
+        selected_text: "some text",
+        question: "What is this?",
+        anchor_position: { start_offset: 0, end_offset: 9, message_id: "msg-1" },
+      }),
+      res,
+      next,
+    );
+    expect(next).toHaveBeenCalled();
+    expect(res.statusCode).not.toBe(422);
+  });
+
+  it("Observation: validateSideQuestionBody rejects inverted range start_offset:15, end_offset:5\n  Validates: Requirements 3.3", () => {
+    const next = vi.fn();
+    const res = mockRes();
+    validateSideQuestionBody(
+      mockReq({
+        selected_text: "some text",
+        question: "What is this?",
+        anchor_position: { start_offset: 15, end_offset: 5, message_id: "msg-1" },
+      }),
+      res,
+      next,
+    );
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(422);
+  });
+
+  it("Observation: validateSideQuestionBody rejects negative start_offset:-1\n  Validates: Requirements 3.2", () => {
+    const next = vi.fn();
+    const res = mockRes();
+    validateSideQuestionBody(
+      mockReq({
+        selected_text: "some text",
+        question: "What is this?",
+        anchor_position: { start_offset: -1, end_offset: 5, message_id: "msg-1" },
+      }),
+      res,
+      next,
+    );
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(422);
+  });
+
+  it("Observation: submitSideQuestion succeeds with startOffset:0, endOffset:10\n  Validates: Requirements 3.1", () => {
+    const result = submitSideQuestion(store, "some text", "What is this?", {
+      messageId: "msg-1",
+      startOffset: 0,
+      endOffset: 10,
+    });
+    expect(result).toHaveProperty("thread");
+    expect(result).toHaveProperty("userMessage");
+  });
+
+  it("Observation: submitSideQuestion throws ValidationError for inverted range startOffset:15, endOffset:5\n  Validates: Requirements 3.3", () => {
+    expect(() =>
+      submitSideQuestion(store, "some text", "What is this?", {
+        messageId: "msg-1",
+        startOffset: 15,
+        endOffset: 5,
+      }),
+    ).toThrow(ValidationError);
+  });
+
+  // -----------------------------------------------------------------------
+  // PBT: for all start_offset < end_offset (both non-negative), both accept
+  // Validates: Requirements 3.1
+  // -----------------------------------------------------------------------
+
+  it("Property 2 (middleware accept): for all start_offset < end_offset (both non-negative), validateSideQuestionBody calls next()\n  Validates: Requirements 3.1", () => {
+    fc.assert(
+      fc.property(
+        fc.nat({ max: 9999 }),
+        fc.integer({ min: 1, max: 10000 }),
+        (start, gap) => {
+          const end = start + gap; // guarantees start < end
+          const next = vi.fn();
+          const res = mockRes();
+          validateSideQuestionBody(
+            mockReq({
+              selected_text: "selected word",
+              question: "What does this mean?",
+              anchor_position: { start_offset: start, end_offset: end, message_id: "msg-abc" },
+            }),
+            res,
+            next,
+          );
+          expect(next).toHaveBeenCalled();
+          expect(res.statusCode).not.toBe(422);
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
+  it("Property 2 (business logic accept): for all start_offset < end_offset (both non-negative), submitSideQuestion succeeds\n  Validates: Requirements 3.1", () => {
+    fc.assert(
+      fc.property(
+        fc.nat({ max: 9999 }),
+        fc.integer({ min: 1, max: 10000 }),
+        (start, gap) => {
+          const end = start + gap;
+          const localStore = new ConversationStore();
+          const result = submitSideQuestion(localStore, "selected word", "What does this mean?", {
+            messageId: "msg-abc",
+            startOffset: start,
+            endOffset: end,
+          });
+          expect(result).toHaveProperty("thread");
+          expect(result).toHaveProperty("userMessage");
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
+  // -----------------------------------------------------------------------
+  // PBT: for all start_offset > end_offset (start non-negative), both reject
+  // Validates: Requirements 3.3
+  // -----------------------------------------------------------------------
+
+  it("Property 2 (middleware reject): for all start_offset > end_offset (start non-negative), validateSideQuestionBody returns 422\n  Validates: Requirements 3.3", () => {
+    fc.assert(
+      fc.property(
+        fc.nat({ max: 9999 }),
+        fc.integer({ min: 1, max: 10000 }),
+        (end, gap) => {
+          const start = end + gap; // guarantees start > end
+          const next = vi.fn();
+          const res = mockRes();
+          validateSideQuestionBody(
+            mockReq({
+              selected_text: "selected word",
+              question: "What does this mean?",
+              anchor_position: { start_offset: start, end_offset: end, message_id: "msg-abc" },
+            }),
+            res,
+            next,
+          );
+          expect(next).not.toHaveBeenCalled();
+          expect(res.statusCode).toBe(422);
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
+  it("Property 2 (business logic reject): for all start_offset > end_offset (start non-negative), submitSideQuestion throws ValidationError\n  Validates: Requirements 3.3", () => {
+    fc.assert(
+      fc.property(
+        fc.nat({ max: 9999 }),
+        fc.integer({ min: 1, max: 10000 }),
+        (end, gap) => {
+          const start = end + gap;
+          const localStore = new ConversationStore();
+          expect(() =>
+            submitSideQuestion(localStore, "selected word", "What does this mean?", {
+              messageId: "msg-abc",
+              startOffset: start,
+              endOffset: end,
+            }),
+          ).toThrow(ValidationError);
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
+  // -----------------------------------------------------------------------
+  // PBT: for all negative start_offset, middleware rejects with 422
+  // Validates: Requirements 3.2
+  // -----------------------------------------------------------------------
+
+  it("Property 2 (negative offset): for all negative start_offset, validateSideQuestionBody returns 422\n  Validates: Requirements 3.2", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: -10000, max: -1 }),
+        fc.nat({ max: 10000 }),
+        (start, end) => {
+          const next = vi.fn();
+          const res = mockRes();
+          validateSideQuestionBody(
+            mockReq({
+              selected_text: "selected word",
+              question: "What does this mean?",
+              anchor_position: { start_offset: start, end_offset: end, message_id: "msg-abc" },
+            }),
+            res,
+            next,
+          );
+          expect(next).not.toHaveBeenCalled();
+          expect(res.statusCode).toBe(422);
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
+  // -----------------------------------------------------------------------
+  // PBT: empty selected_text, empty question, empty message_id still rejected
+  // Validates: Requirements 3.4, 3.5, 3.6
+  // -----------------------------------------------------------------------
+
+  it("Property 2 (empty selected_text): empty selected_text is rejected by validateSideQuestionBody\n  Validates: Requirements 3.4", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom("", "   ", "\t", "\n"),
+        (emptyText) => {
+          const next = vi.fn();
+          const res = mockRes();
+          validateSideQuestionBody(
+            mockReq({
+              selected_text: emptyText,
+              question: "What does this mean?",
+              anchor_position: { start_offset: 0, end_offset: 10, message_id: "msg-abc" },
+            }),
+            res,
+            next,
+          );
+          expect(next).not.toHaveBeenCalled();
+          expect(res.statusCode).toBe(422);
+        },
+      ),
+      { numRuns: 20 },
+    );
+  });
+
+  it("Property 2 (empty question): empty question is rejected by validateSideQuestionBody\n  Validates: Requirements 3.5", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom("", "   ", "\t", "\n"),
+        (emptyQuestion) => {
+          const next = vi.fn();
+          const res = mockRes();
+          validateSideQuestionBody(
+            mockReq({
+              selected_text: "selected word",
+              question: emptyQuestion,
+              anchor_position: { start_offset: 0, end_offset: 10, message_id: "msg-abc" },
+            }),
+            res,
+            next,
+          );
+          expect(next).not.toHaveBeenCalled();
+          expect(res.statusCode).toBe(422);
+        },
+      ),
+      { numRuns: 20 },
+    );
+  });
+
+  it("Property 2 (empty message_id): empty message_id is rejected by validateSideQuestionBody\n  Validates: Requirements 3.6", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom("", "   ", "\t", "\n"),
+        (emptyMsgId) => {
+          const next = vi.fn();
+          const res = mockRes();
+          validateSideQuestionBody(
+            mockReq({
+              selected_text: "selected word",
+              question: "What does this mean?",
+              anchor_position: { start_offset: 0, end_offset: 10, message_id: emptyMsgId },
+            }),
+            res,
+            next,
+          );
+          expect(next).not.toHaveBeenCalled();
+          expect(res.statusCode).toBe(422);
+        },
+      ),
+      { numRuns: 20 },
+    );
+  });
+});

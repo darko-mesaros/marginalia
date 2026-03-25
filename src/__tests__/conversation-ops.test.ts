@@ -74,12 +74,14 @@ describe("conversation-ops", () => {
       ).toThrow(ValidationError);
     });
 
-    it("throws ValidationError when start >= end", () => {
-      expect(() =>
-        submitSideQuestion(store, "text", "question", {
-          messageId: "msg-1", startOffset: 10, endOffset: 10,
-        })
-      ).toThrow(ValidationError);
+    it("accepts equal offsets (double-click selection)", () => {
+      const { thread, userMessage } = submitSideQuestion(store, "text", "question", {
+        messageId: "msg-1", startOffset: 10, endOffset: 10,
+      });
+      expect(thread.anchor.startOffset).toBe(10);
+      expect(thread.anchor.endOffset).toBe(10);
+      expect(userMessage.role).toBe("user");
+      expect(userMessage.content).toBe("question");
     });
 
     it("throws ValidationError when start > end", () => {

@@ -1,6 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as fc from "fast-check";
+import type { Request, Response, NextFunction } from "express";
 import { processTitle } from "../title-generator.js";
+import { validateSideQuestionBody } from "../validation.js";
+import { submitSideQuestion, ValidationError } from "../conversation-ops.js";
+import { ConversationStore } from "../conversation-store.js";
 
 // ---------------------------------------------------------------------------
 // Bug Condition Exploration Tests
@@ -170,6 +174,157 @@ describe("Bug 2 — Title markdown stripping", () => {
         expect(result.length).toBeLessThanOrEqual(60);
       }),
       { numRuns: 200 }
+    );
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Bug 3 — Double-click anchor offset: equal start_offset and end_offset rejected
+// Validates: Requirements 1.1, 1.2, 2.1, 2.2
+//
+// Bug condition: start_offset >= 0 AND start_offset == end_offset
+//   AND selected_text IS non-empty AND question IS non-empty
+//   AND message_id IS non-empty
+//
+// Both validateSideQuestionBody (validation.ts) and submitSideQuestion
+// (conversation-ops.ts) use `>=` comparison which rejects equal offsets.
+// These tests encode the EXPECTED (fixed) behavior — they WILL FAIL on
+// unfixed code, confirming the bug exists.
+// ---------------------------------------------------------------------------
+
+/** Helper to create a mock Express request with a given body. */
+function mockReq(body: unknown): Request {
+  return { body } as unknown as Request;
+}
+
+/** Helper to create a mock Express response that captures status + json calls. */
+function mockRes() {
+  const res = {
+    statusCode: 0,
+    jsonBody: null as unknown,
+    status(code: number) {
+      res.statusCode = code;
+      return res;
+    },
+    json(body: unknown) {
+      res.jsonBody = body;
+      return res;
+    },
+  };
+  return res as unknown as Response & { statusCode: number; jsonBody: unknown };
+}
+
+describe("Bug 3 — Double-click anchor offset: equal offsets rejected", () => {
+  let store: ConversationStore;
+
+  beforeEach(() => {
+    store = new ConversationStore();
+  });
+
+  // -----------------------------------------------------------------------
+  // Unit tests — specific equal-offset examples
+  // -----------------------------------------------------------------------
+
+  it("validateSideQuestionBody should call next() for equal offsets (start_offset: 5, end_offset: 5)\n  Validates: Requirements 1.1, 2.1", () => {
+    const next = vi.fn();
+    const res = mockRes();
+    validateSideQuestionBody(
+      mockReq({
+        selected_text: "Rust",
+        question: "What is this?",
+        anchor_position: { start_offset: 5, end_offset: 5, message_id: "msg-1" },
+      }),
+      res,
+      next,
+    );
+    expect(next).toHaveBeenCalled();
+    expect(res.statusCode).not.toBe(422);
+  });
+
+  it("submitSideQuestion should return { thread, userMessage } for equal offsets (startOffset: 5, endOffset: 5)\n  Validates: Requirements 1.2, 2.2", () => {
+    const result = submitSideQuestion(store, "Rust", "What is this?", {
+      messageId: "msg-1",
+      startOffset: 5,
+      endOffset: 5,
+    });
+    expect(result).toHaveProperty("thread");
+    expect(result).toHaveProperty("userMessage");
+    expect(result.thread.anchor.startOffset).toBe(5);
+    expect(result.thread.anchor.endOffset).toBe(5);
+    expect(result.userMessage.role).toBe("user");
+  });
+
+  it("validateSideQuestionBody should call next() for zero-zero offsets with valid non-empty selected_text\n  Validates: Requirements 1.1, 2.1", () => {
+    const next = vi.fn();
+    const res = mockRes();
+    validateSideQuestionBody(
+      mockReq({
+        selected_text: "Hello",
+        question: "Explain this",
+        anchor_position: { start_offset: 0, end_offset: 0, message_id: "msg-1" },
+      }),
+      res,
+      next,
+    );
+    expect(next).toHaveBeenCalled();
+    expect(res.statusCode).not.toBe(422);
+  });
+
+  it("submitSideQuestion should not throw for zero-zero offsets with valid non-empty selected_text\n  Validates: Requirements 1.2, 2.2", () => {
+    expect(() =>
+      submitSideQuestion(store, "Hello", "Explain this", {
+        messageId: "msg-1",
+        startOffset: 0,
+        endOffset: 0,
+      }),
+    ).not.toThrow();
+  });
+
+  // -----------------------------------------------------------------------
+  // Property-based tests — for all non-negative n, equal offsets accepted
+  // -----------------------------------------------------------------------
+
+  it("Property 1 (middleware): for all non-negative n, validateSideQuestionBody({ start_offset: n, end_offset: n }) should call next()\n  Validates: Requirements 1.1, 2.1", () => {
+    fc.assert(
+      fc.property(
+        fc.nat({ max: 10000 }),
+        (n) => {
+          const next = vi.fn();
+          const res = mockRes();
+          validateSideQuestionBody(
+            mockReq({
+              selected_text: "selected word",
+              question: "What does this mean?",
+              anchor_position: { start_offset: n, end_offset: n, message_id: "msg-abc" },
+            }),
+            res,
+            next,
+          );
+          expect(next).toHaveBeenCalled();
+          expect(res.statusCode).not.toBe(422);
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it("Property 1 (business logic): for all non-negative n, submitSideQuestion with equal offsets should not throw\n  Validates: Requirements 1.2, 2.2", () => {
+    fc.assert(
+      fc.property(
+        fc.nat({ max: 10000 }),
+        (n) => {
+          const localStore = new ConversationStore();
+          expect(() =>
+            submitSideQuestion(localStore, "selected word", "What does this mean?", {
+              messageId: "msg-abc",
+              startOffset: n,
+              endOffset: n,
+            }),
+          ).not.toThrow();
+        },
+      ),
+      { numRuns: 100 },
     );
   });
 });

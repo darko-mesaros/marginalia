@@ -65,7 +65,7 @@ export function validateSideQuestionBody(
     return;
   }
 
-  if (start_offset >= end_offset) {
+  if (start_offset > end_offset) {
     res.status(422).json({
       error:
         "Invalid anchor position: start_offset must be less than end_offset",

@@ -106,13 +106,28 @@ describe("validateSideQuestionBody", () => {
     });
   });
 
-  it("returns 422 when start_offset >= end_offset", () => {
+  it("calls next() when start_offset equals end_offset (double-click selection)", () => {
     const next = vi.fn();
     const res = mockRes();
     validateSideQuestionBody(
       mockReq({
         ...validBody,
         anchor_position: { start_offset: 5, end_offset: 5, message_id: "m1" },
+      }),
+      res,
+      next
+    );
+    expect(next).toHaveBeenCalled();
+    expect(res.statusCode).toBe(0);
+  });
+
+  it("returns 422 when start_offset > end_offset (inverted range)", () => {
+    const next = vi.fn();
+    const res = mockRes();
+    validateSideQuestionBody(
+      mockReq({
+        ...validBody,
+        anchor_position: { start_offset: 15, end_offset: 5, message_id: "m1" },
       }),
       res,
       next
