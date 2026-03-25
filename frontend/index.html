@@ -75,6 +75,7 @@
 
     /* ── Content Area (Main + Margin) ── */
     #content-area {
+      position: relative;
       display: grid;
       grid-template-columns: minmax(0, 1fr) 340px;
       overflow: hidden;
@@ -644,14 +645,14 @@
 
     /* ── Anchor connector lines ── */
     #anchor-connector-svg {
-      position: fixed;
+      position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
       pointer-events: none;
       z-index: 10;
-      overflow: visible;
+      overflow: hidden;
     }
 
     #anchor-connector-svg path {
@@ -826,6 +827,9 @@
     <aside id="margin-note-panel" role="complementary" aria-label="Margin notes">
       <!-- Margin notes go here -->
     </aside>
+
+    <!-- Anchor connector SVG overlay -->
+    <svg id="anchor-connector-svg" aria-hidden="true"></svg>
   </div>
 
   <!-- Settings Dialog -->
@@ -869,9 +873,6 @@
       </section>
     </div>
   </dialog>
-
-  <!-- Anchor connector SVG overlay -->
-  <svg id="anchor-connector-svg" aria-hidden="true"></svg>
 
   <!-- CDN Dependencies -->
   <script src="https://unpkg.com/@popperjs/core@2"></script>

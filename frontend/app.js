@@ -1797,6 +1797,13 @@ function updateConnectors() {
   // ── READ PHASE (Task 5.1) ──
   // Collect all measurements before any DOM writes.
 
+  // The SVG is positioned inside #content-area, so we need to offset
+  // viewport-relative getBoundingClientRect() coords by the container origin.
+  const contentArea = document.getElementById("content-area");
+  const containerRect = contentArea.getBoundingClientRect();
+  const ox = containerRect.left;
+  const oy = containerRect.top;
+
   const mainRect = mainPanel.getBoundingClientRect();
   const marginRect = marginNotePanel.getBoundingClientRect();
 
@@ -1823,8 +1830,8 @@ function updateConnectors() {
       continue;
     }
 
-    const x2 = noteRect.left;
-    const y2 = noteRect.top + 20; // ~top of header
+    const x2 = noteRect.left - ox;
+    const y2 = noteRect.top + 20 - oy; // ~top of header
 
     // Find the highlighted anchor range in the main panel
     const section = mainPanel.querySelector(
@@ -1858,18 +1865,18 @@ function updateConnectors() {
     let x1, y1;
     if (anchorRect && isRectInViewport(anchorRect, mainRect)) {
       // Anchor is visible — use its actual position
-      x1 = anchorRect.right;
-      y1 = anchorRect.top + anchorRect.height / 2;
+      x1 = anchorRect.right - ox;
+      y1 = anchorRect.top + anchorRect.height / 2 - oy;
     } else if (anchorRect) {
       // Anchor exists but is off-screen — keep original x so the vertical
       // column stays in the same place; only clamp y to viewport edge.
-      x1 = anchorRect.right;
-      y1 = anchorRect.top + anchorRect.height / 2;
-      if (y1 < mainRect.top) y1 = mainRect.top;
-      if (y1 > mainRect.bottom) y1 = mainRect.bottom;
+      x1 = anchorRect.right - ox;
+      y1 = anchorRect.top + anchorRect.height / 2 - oy;
+      if (y1 < mainRect.top - oy) y1 = mainRect.top - oy;
+      if (y1 > mainRect.bottom - oy) y1 = mainRect.bottom - oy;
     } else {
       // Anchor rect not found — use main panel right edge, same Y as note
-      x1 = mainRect.right;
+      x1 = mainRect.right - ox;
       y1 = y2;
     }
 
