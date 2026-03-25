@@ -24,6 +24,8 @@ marginalia/
 │   └── mcp.json                # Persistent MCP server config (VS Code-compatible format, loaded on startup)
 ├── frontend/                   # Static frontend (no build step)
 │   ├── index.html              # Single-page app shell (includes collapsible sidebar for conversation library)
+│   ├── color-palette.js        # 32-color palette, getThreadColor(index), hexToRgba() — pure functions, no DOM deps
+│   ├── connector-math.js       # Pure math for SVG connector path computation
 │   └── app.js                  # All frontend logic (vanilla JS) — conversation library sidebar, streaming, side threads, text selection
 ├── package.json
 ├── tsconfig.json               # ES2022, Node16 modules, strict mode

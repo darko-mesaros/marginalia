@@ -301,6 +301,16 @@ async function handleNewConversation() {
     anchorRanges.length = 0;
     if (typeof CSS !== "undefined" && CSS.highlights) {
       CSS.highlights.delete("marginalia-anchors");
+      // Clear per-thread highlights
+      for (const key of CSS.highlights.keys()) {
+        if (key.startsWith("marginalia-anchor-")) CSS.highlights.delete(key);
+      }
+    }
+    // Clear dynamic highlight style rules
+    if (highlightStyleEl && highlightStyleEl.sheet) {
+      while (highlightStyleEl.sheet.cssRules.length > 0) {
+        highlightStyleEl.sheet.deleteRule(0);
+      }
     }
 
     // Re-enable and focus input
@@ -418,7 +428,8 @@ async function loadConversation(id) {
     // Clear and re-render side threads as margin notes
     marginNotePanel.innerHTML = "";
 
-    for (const thread of state.conversation.sideThreads) {
+    for (let threadIdx = 0; threadIdx < state.conversation.sideThreads.length; threadIdx++) {
+      const thread = state.conversation.sideThreads[threadIdx];
       // Find first user message and last assistant message
       const userMsg = thread.messages.find(m => m.role === "user");
       if (!userMsg) continue;
@@ -427,6 +438,7 @@ async function loadConversation(id) {
         selectedText: thread.anchor.selectedText,
         question: userMsg.content,
         anchorMessageId: thread.anchor.messageId,
+        colorIndex: threadIdx,
       });
 
       // Remove loading indicator and fill in content
@@ -467,14 +479,26 @@ async function loadConversation(id) {
     anchorRanges.length = 0;
     if (typeof CSS !== "undefined" && CSS.highlights) {
       CSS.highlights.delete("marginalia-anchors");
+      // Clear per-thread highlights
+      for (const key of CSS.highlights.keys()) {
+        if (key.startsWith("marginalia-anchor-")) CSS.highlights.delete(key);
+      }
+    }
+    // Clear dynamic highlight style rules
+    if (highlightStyleEl && highlightStyleEl.sheet) {
+      while (highlightStyleEl.sheet.cssRules.length > 0) {
+        highlightStyleEl.sheet.deleteRule(0);
+      }
     }
 
     // Re-apply highlights for each side thread
-    for (const thread of state.conversation.sideThreads) {
+    for (let i = 0; i < state.conversation.sideThreads.length; i++) {
+      const thread = state.conversation.sideThreads[i];
       highlightAnchor(
         thread.anchor.messageId,
         thread.anchor.startOffset,
-        thread.anchor.endOffset
+        thread.anchor.endOffset,
+        i
       );
     }
 
@@ -1149,9 +1173,12 @@ function handleMainPanelMouseUp() {
  * @param {{ selectedText: string, question: string, anchorMessageId: string }} opts
  * @returns {{ el: HTMLElement, responseEl: HTMLElement, loadingEl: HTMLElement, bodyEl: HTMLElement }}
  */
-function renderMarginNote({ selectedText, question, anchorMessageId }) {
+function renderMarginNote({ selectedText, question, anchorMessageId, colorIndex }) {
   const note = document.createElement("div");
   note.className = "margin-note";
+  if (colorIndex !== undefined) {
+    note.style.borderLeft = `3px solid ${getThreadColor(colorIndex)}`;
+  }
 
   // ── Header: excerpt + toggle ──
   const header = document.createElement("div");
@@ -1276,11 +1303,15 @@ function showMarginNoteError(responseEl, message) {
  * @param {{ message_id: string, start_offset: number, end_offset: number }} anchorPosition
  */
 async function submitSideQuestion(selectedText, question, anchorPosition) {
+  // Color index is the next available slot in sideThreads
+  const colorIndex = state.conversation.sideThreads.length;
+
   // Create the margin note UI immediately
   const noteUI = renderMarginNote({
     selectedText,
     question,
     anchorMessageId: anchorPosition.message_id,
+    colorIndex,
   });
 
   let threadId = null;
@@ -1359,7 +1390,7 @@ async function submitSideQuestion(selectedText, question, anchorPosition) {
             state.conversation.sideThreads.push(sideThread);
 
             // Highlight the anchored text in the main panel
-            highlightAnchor(anchorPosition.message_id, anchorPosition.start_offset, anchorPosition.end_offset);
+            highlightAnchor(anchorPosition.message_id, anchorPosition.start_offset, anchorPosition.end_offset, colorIndex);
 
             // Store thread id on the note element for follow-up wiring
             noteUI.el.dataset.threadId = sideThread.id;
@@ -1415,7 +1446,7 @@ async function submitSideQuestion(selectedText, question, anchorPosition) {
           noteUI.el.dataset.threadId = sideThread.id;
 
           // Highlight the anchored text in the main panel
-          highlightAnchor(anchorPosition.message_id, anchorPosition.start_offset, anchorPosition.end_offset);
+          highlightAnchor(anchorPosition.message_id, anchorPosition.start_offset, anchorPosition.end_offset, colorIndex);
 
           // Re-layout margin notes after new note is fully rendered
           layoutMarginNotes();
@@ -1581,6 +1612,22 @@ async function submitSideFollowup(threadId, question, noteUI) {
 /** Collection of all anchor Range objects for persistent highlighting. */
 const anchorRanges = [];
 
+/** Managed <style> element for per-thread highlight CSS rules. */
+let highlightStyleEl = null;
+
+/**
+ * Ensure the managed <style> element exists for dynamic highlight rules.
+ * @returns {CSSStyleSheet}
+ */
+function getHighlightStyleSheet() {
+  if (!highlightStyleEl) {
+    highlightStyleEl = document.createElement("style");
+    highlightStyleEl.id = "marginalia-highlight-styles";
+    document.head.appendChild(highlightStyleEl);
+  }
+  return highlightStyleEl.sheet;
+}
+
 /**
  * Highlight a text range within a section using the CSS Custom Highlight API.
  * Walks the text node tree of the section identified by messageId, builds a
@@ -1593,7 +1640,7 @@ const anchorRanges = [];
  * @param {number} startOffset — character start offset relative to section text
  * @param {number} endOffset   — character end offset relative to section text
  */
-function highlightAnchor(messageId, startOffset, endOffset) {
+function highlightAnchor(messageId, startOffset, endOffset, colorIndex) {
   // Graceful degradation: CSS Custom Highlight API not supported
   if (typeof CSS === "undefined" || !CSS.highlights) return;
 
@@ -1629,8 +1676,38 @@ function highlightAnchor(messageId, startOffset, endOffset) {
 
   anchorRanges.push(range);
 
-  const highlight = new Highlight(...anchorRanges);
-  CSS.highlights.set("marginalia-anchors", highlight);
+  if (colorIndex !== undefined) {
+    // Per-thread named highlight with thread color
+    const highlightName = `marginalia-anchor-${colorIndex}`;
+    const highlight = new Highlight(range);
+    CSS.highlights.set(highlightName, highlight);
+
+    // Inject a CSS rule for this highlight
+    try {
+      const sheet = getHighlightStyleSheet();
+      const bgColor = hexToRgba(getThreadColor(colorIndex), 0.25);
+      const rule = `::highlight(${highlightName}) { background-color: ${bgColor}; }`;
+      // Check if rule already exists to avoid duplicates
+      let exists = false;
+      for (let i = 0; i < sheet.cssRules.length; i++) {
+        if (sheet.cssRules[i].cssText.includes(highlightName)) {
+          exists = true;
+          break;
+        }
+      }
+      if (!exists) {
+        sheet.insertRule(rule, sheet.cssRules.length);
+      }
+    } catch (e) {
+      // Degrade gracefully — fall back to shared highlight
+      const highlight = new Highlight(...anchorRanges);
+      CSS.highlights.set("marginalia-anchors", highlight);
+    }
+  } else {
+    // Fallback: shared highlight (no color index provided)
+    const highlight = new Highlight(...anchorRanges);
+    CSS.highlights.set("marginalia-anchors", highlight);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1723,7 +1800,7 @@ function updateConnectors() {
   const mainRect = mainPanel.getBoundingClientRect();
   const marginRect = marginNotePanel.getBoundingClientRect();
 
-  const measurements = []; // { threadId, x1, y1, x2, y2, noteVisible }
+  const measurements = []; // { threadId, threadIndex, x1, y1, x2, y2, noteVisible }
   const activeThreadIds = new Set();
 
   const notes = marginNotePanel.querySelectorAll(".margin-note");
@@ -1731,7 +1808,8 @@ function updateConnectors() {
     const threadId = note.dataset.threadId;
     if (!threadId) continue;
 
-    const sideThread = state.conversation.sideThreads.find((t) => t.id === threadId);
+    const threadIndex = state.conversation.sideThreads.findIndex((t) => t.id === threadId);
+    const sideThread = threadIndex >= 0 ? state.conversation.sideThreads[threadIndex] : null;
     if (!sideThread) continue;
 
     // Left edge of the note header (where the line ends)
@@ -1741,7 +1819,7 @@ function updateConnectors() {
     // If the note is off-screen, skip entirely
     if (!noteVisible) {
       activeThreadIds.add(threadId);
-      measurements.push({ threadId, x1: 0, y1: 0, x2: 0, y2: 0, noteVisible: false });
+      measurements.push({ threadId, threadIndex, x1: 0, y1: 0, x2: 0, y2: 0, noteVisible: false });
       continue;
     }
 
@@ -1796,7 +1874,7 @@ function updateConnectors() {
     }
 
     activeThreadIds.add(threadId);
-    measurements.push({ threadId, x1, y1, x2, y2, noteVisible: true });
+    measurements.push({ threadId, threadIndex, x1, y1, x2, y2, noteVisible: true });
   }
 
   // ── WRITE PHASE (Task 5.2) ──
@@ -1818,6 +1896,7 @@ function updateConnectors() {
       path.removeAttribute("display");
       const d = computeBezierPath(m.x1, m.y1, m.x2, m.y2);
       path.setAttribute("d", d);
+      path.setAttribute("stroke", getThreadColor(m.threadIndex));
     }
   }
 

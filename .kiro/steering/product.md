@@ -12,6 +12,7 @@ Marginalia is a web-based LLM explainer tool. Users ask a question, receive a ma
 ## Key Behaviors
 
 - Text selection triggers a popover for asking a side question
+- Each side thread is assigned a unique color from a 32-color palette based on creation order — the color is applied to the margin note border, connector line, and anchor text highlight for easy visual tracing
 - Side thread answers are concise (2–4 sentences, plain prose, no headers/bullets)
 - Main thread answers are structured markdown with headings, code blocks, examples
 - All threads share context — the LLM is aware of every margin note discussion
