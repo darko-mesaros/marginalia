@@ -11,20 +11,25 @@ const TITLE_PROMPT = `Generate a short title (3-7 words) for the user's question
  * falls back to "Untitled Conversation" if empty.
  */
 export function processTitle(raw: string): string {
-  // Strip markdown formatting before trimming
+  // Strip markdown formatting before trimming.
+  // Run two passes so nested patterns (e.g. "**# heading**") are fully cleaned.
   let title = raw;
   title = title.replace(/<think>[\s\S]*?<\/think>/gi, ""); // thinking tags
-  title = title.replace(/^#{1,6}\s+/gm, "");           // heading markers
-  title = title.replace(/!\[(.+?)\]\(.+?\)/g, "$1");    // images (before links)
-  title = title.replace(/\[(.+?)\]\(.+?\)/g, "$1");     // links
-  title = title.replace(/\*\*(.+?)\*\*/g, "$1");        // bold
-  title = title.replace(/\*(.+?)\*/g, "$1");             // italic (asterisk)
-  title = title.replace(/(?<!\w)_(.+?)_(?!\w)/g, "$1");  // italic (underscore)
-  title = title.replace(/~~(.+?)~~/g, "$1");             // strikethrough
-  title = title.replace(/`(.+?)`/g, "$1");               // inline code
-  title = title.replace(/^>\s?/gm, "");                  // blockquote markers
-  title = title.replace(/^[-*+]\s+/gm, "");              // unordered list markers
-  title = title.replace(/^\d+\.\s+/gm, "");              // ordered list markers
+
+  for (let pass = 0; pass < 2; pass++) {
+    title = title.replace(/\*\*(.+?)\*\*/g, "$1");        // bold
+    title = title.replace(/\*(.+?)\*/g, "$1");             // italic (asterisk)
+    title = title.replace(/(?<!\w)_(.+?)_(?!\w)/g, "$1");  // italic (underscore)
+    title = title.replace(/~~(.+?)~~/g, "$1");             // strikethrough
+    title = title.replace(/`(.+?)`/g, "$1");               // inline code
+    title = title.replace(/!\[(.+?)\]\(.+?\)/g, "$1");    // images (before links)
+    title = title.replace(/\[(.+?)\]\(.+?\)/g, "$1");     // links
+    title = title.replace(/^#{1,6}\s+/gm, "");            // heading markers
+    title = title.replace(/^>\s?/gm, "");                  // blockquote markers
+    title = title.replace(/^[-*+]\s+/gm, "");              // unordered list markers
+    title = title.replace(/^\d+\.\s+/gm, "");              // ordered list markers
+  }
+
   title = title.replace(/^["']+|["']+$/g, "");           // surrounding quotes
   title = title.replace(/\s{2,}/g, " ");                 // collapse multiple spaces
 

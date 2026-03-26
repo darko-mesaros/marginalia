@@ -61,7 +61,7 @@ Uses `tsx watch` for auto-reload on file changes.
 npm test
 ```
 
-Runs 247 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across models, context assembly, conversation ops, validation, agent, retry, SSE, routes, layout, markdown rendering, MCP config management, data directory resolution, and system prompt persistence.
+Runs 238 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across models, context assembly, conversation ops, validation, agent, retry, SSE, routes, layout, markdown rendering, MCP config management, data directory resolution, and system prompt persistence.
 
 ## How It Works
 
