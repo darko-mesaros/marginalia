@@ -20,6 +20,7 @@ import {
   writeDoneEvent,
   writeErrorEvent,
 } from "./sse.js";
+import { saveSystemPrompt } from "./system-prompt.js";
 
 interface RouterDeps {
   store: ConversationStore;
@@ -28,10 +29,11 @@ interface RouterDeps {
   library: ConversationLibrary;
   titleGenerator: TitleGenerator;
   mcpConfigManager: McpConfigManager;
+  dataDir: string;
 }
 
 export function createRouter(deps: RouterDeps): Router {
-  const { store, agent, config, library, titleGenerator, mcpConfigManager } = deps;
+  const { store, agent, config, library, titleGenerator, mcpConfigManager, dataDir } = deps;
   const router = Router();
 
   router.post("/api/ask", validateAskBody, async (req: Request, res: Response) => {
@@ -393,6 +395,9 @@ export function createRouter(deps: RouterDeps): Router {
       config.systemPrompt = systemPrompt;
       if (systemPrompt !== oldPrompt) {
         agent.updateSystemPrompt(systemPrompt);
+        saveSystemPrompt(dataDir, systemPrompt).catch(err =>
+          console.error("[routes] system prompt save failed:", err)
+        );
       }
     }
 

@@ -328,3 +328,93 @@ describe("Bug 3 — Double-click anchor offset: equal offsets rejected", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bug 4 — Continue message display: submitContinuation skips user question div
+// Validates: Requirements 1.1, 1.2, 2.1, 2.2
+//
+// Bug condition: submitContinuation() does NOT create a user question <div>
+//   between the <hr> divider append and the createResponseSection() call.
+//   The user's continuation question text is never rendered in the main panel.
+//
+// This test reads frontend/app.js, extracts the submitContinuation function
+// body, and asserts that the 4-line question div creation pattern exists
+// AFTER the continuation-divider append and BEFORE createResponseSection.
+//
+// EXPECTED TO FAIL on unfixed code — failure confirms the bug exists.
+// ---------------------------------------------------------------------------
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+describe("Bug 4 — Continue message display: submitContinuation skips user question div", () => {
+  // Read the source file once for all tests
+  const appJsPath = path.resolve(__dirname, "../../frontend/app.js");
+  const appJsSource = fs.readFileSync(appJsPath, "utf-8");
+
+  /**
+   * Extract the body of the submitContinuation function from the source.
+   * Finds "async function submitContinuation(question)" and captures everything
+   * between the divider append and createResponseSection call.
+   */
+  function extractSubmitContinuationBody(): string {
+    // Match the entire submitContinuation function (greedy enough to get the full body)
+    const fnMatch = appJsSource.match(
+      /async function submitContinuation\(question\)\s*\{([\s\S]*?)^\}/m
+    );
+    if (!fnMatch) {
+      throw new Error("Could not find submitContinuation function in frontend/app.js");
+    }
+    return fnMatch[1];
+  }
+
+  /**
+   * Extract the code segment between the divider append and createResponseSection.
+   * This is the critical zone where the question div should be created.
+   */
+  function extractDividerToResponseSection(fnBody: string): string {
+    const dividerAppendIdx = fnBody.indexOf("mainPanel.appendChild(divider)");
+    const createResponseIdx = fnBody.indexOf("createResponseSection(");
+
+    if (dividerAppendIdx === -1) {
+      throw new Error("Could not find mainPanel.appendChild(divider) in submitContinuation");
+    }
+    if (createResponseIdx === -1) {
+      throw new Error("Could not find createResponseSection() call in submitContinuation");
+    }
+
+    // Extract the code between divider append and createResponseSection
+    return fnBody.substring(
+      dividerAppendIdx + "mainPanel.appendChild(divider)".length,
+      createResponseIdx
+    );
+  }
+
+  it("Property 1 (Bug Condition): for any non-empty trimmed question, submitContinuation should contain question div creation pattern\n  Validates: Requirements 1.1, 1.2, 2.1, 2.2", () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 200 }).filter((s) => s.trim().length > 0),
+        (_question) => {
+          const fnBody = extractSubmitContinuationBody();
+          const criticalZone = extractDividerToResponseSection(fnBody);
+
+          // Assert: the critical zone between divider append and createResponseSection
+          // must contain the 4-line question div creation pattern
+
+          // 1. Must create a div element for the question
+          expect(criticalZone).toContain('document.createElement("div")');
+
+          // 2. Must apply font-weight: 600 styling
+          expect(criticalZone).toContain("font-weight: 600");
+
+          // 3. Must apply border-left card styling
+          expect(criticalZone).toContain("border-left: 3px solid var(--color-primary)");
+
+          // 4. Must assign textContent for the question text
+          expect(criticalZone).toMatch(/\.textContent\s*=/);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});

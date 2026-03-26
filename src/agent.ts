@@ -240,4 +240,16 @@ export class MarginaliaAgent {
     this.config = { ...this.config, systemPrompt: prompt };
     this.agent = this.buildAgent(this.mcpClients);
   }
+
+  /**
+   * Disconnect all active MCP clients.
+   * Returns a settled promise array so callers can inspect individual results.
+   */
+  async disconnectAll(): Promise<PromiseSettledResult<void>[]> {
+    const results = await Promise.allSettled(
+      this.mcpClients.map(client => client.disconnect())
+    );
+    this.mcpClients = [];
+    return results;
+  }
 }

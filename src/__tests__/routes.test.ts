@@ -5,6 +5,11 @@ import { ConversationStore } from "../conversation-store.js";
 import type { AppConfig } from "../models.js";
 import type { MarginaliaAgent, StreamEvent } from "../agent.js";
 import type { Request, Response } from "express";
+import { saveSystemPrompt } from "../system-prompt.js";
+
+vi.mock("../system-prompt.js", () => ({
+  saveSystemPrompt: vi.fn(() => Promise.resolve()),
+}));
 
 // Minimal mock agent that yields configurable events
 function createMockAgent(events: StreamEvent[]): MarginaliaAgent {
@@ -97,7 +102,7 @@ describe("POST /api/ask", () => {
       { type: "done", messageId: "ignored-agent-id" },
     ];
     const agent = createMockAgent(events);
-    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/ask");
 
     const req = { body: { question: "What is Rust?" } } as Request;
@@ -138,7 +143,7 @@ describe("POST /api/ask", () => {
       { type: "done", messageId: "msg-1" },
     ];
     const agent = createMockAgent(events);
-    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/ask");
 
     const req = { body: { question: "Search for Rust" } } as Request;
@@ -162,7 +167,7 @@ describe("POST /api/ask", () => {
       { type: "error", message: "Bedrock timeout" },
     ];
     const agent = createMockAgent(events);
-    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/ask");
 
     const req = { body: { question: "Will this fail?" } } as Request;
@@ -183,7 +188,7 @@ describe("POST /api/ask", () => {
       },
     } as unknown as MarginaliaAgent;
 
-    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/ask");
 
     const req = { body: { question: "Boom" } } as Request;
@@ -208,7 +213,7 @@ describe("POST /api/ask", () => {
       },
     } as unknown as MarginaliaAgent;
 
-    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/ask");
 
     const req = { body: { question: "Disconnect me" } } as Request;
@@ -269,7 +274,7 @@ describe("POST /api/side-question", () => {
       { type: "done", messageId: "ignored" },
     ];
     const agent = createMockAgent(events);
-    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/side-question");
 
     const req = {
@@ -311,7 +316,7 @@ describe("POST /api/side-question", () => {
       { type: "error", message: "LLM failure" },
     ];
     const agent = createMockAgent(events);
-    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/side-question");
 
     const req = {
@@ -349,7 +354,7 @@ describe("POST /api/continue", () => {
       { type: "done", messageId: "ignored" },
     ];
     const agent = createMockAgent(events);
-    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/continue");
 
     const req = { body: { question: "Tell me more about ownership" } } as Request;
@@ -389,7 +394,7 @@ describe("POST /api/continue", () => {
       { type: "error", message: "Bedrock timeout" },
     ];
     const agent = createMockAgent(events);
-    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/continue");
 
     const req = { body: { question: "Continue please" } } as Request;
@@ -411,7 +416,7 @@ describe("POST /api/continue", () => {
       },
     } as unknown as MarginaliaAgent;
 
-    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/continue");
 
     const req = { body: { question: "Boom" } } as Request;
@@ -452,7 +457,7 @@ describe("POST /api/side-followup", () => {
       { type: "done", messageId: "ignored" },
     ];
     const agent = createMockAgent(events);
-    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/side-followup");
 
     const req = {
@@ -486,7 +491,7 @@ describe("POST /api/side-followup", () => {
 
   it("returns 500 for non-existent thread_id", async () => {
     const agent = createMockAgent([]);
-    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/side-followup");
 
     const req = {
@@ -510,7 +515,7 @@ describe("GET /api/settings", () => {
     };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "get", "/api/settings");
 
     const req = {} as Request;
@@ -533,7 +538,7 @@ describe("PUT /api/settings", () => {
     const config: AppConfig = { ...baseConfig };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "put", "/api/settings");
 
     const req = { body: { systemPrompt: "New prompt" } } as Request;
@@ -551,7 +556,7 @@ describe("PUT /api/settings", () => {
     const config: AppConfig = { ...baseConfig };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "put", "/api/settings");
 
     const req = { body: { bedrockModelId: "new-model-id" } } as Request;
@@ -568,7 +573,7 @@ describe("PUT /api/settings", () => {
     const config: AppConfig = { ...baseConfig };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "put", "/api/settings");
 
     const req = { body: { systemPrompt: baseConfig.systemPrompt } } as Request;
@@ -583,7 +588,7 @@ describe("PUT /api/settings", () => {
     const config: AppConfig = { ...baseConfig };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "put", "/api/settings");
 
     const req = { body: { systemPrompt: 123 } } as Request;
@@ -598,7 +603,7 @@ describe("PUT /api/settings", () => {
     const config: AppConfig = { ...baseConfig };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "put", "/api/settings");
 
     const req = { body: { bedrockModelId: "  " } } as Request;
@@ -608,6 +613,40 @@ describe("PUT /api/settings", () => {
 
     expect(res.statusCode).toBe(422);
   });
+
+  it("calls saveSystemPrompt when systemPrompt changes", () => {
+    const config: AppConfig = { ...baseConfig };
+    const agent = createMockAgent([]);
+    const store = new ConversationStore();
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
+    const handler = extractHandler(router, "put", "/api/settings");
+
+    vi.mocked(saveSystemPrompt).mockClear();
+
+    const req = { body: { systemPrompt: "New prompt" } } as Request;
+    const res = createMockResponse();
+
+    handler(req, res, vi.fn());
+
+    expect(saveSystemPrompt).toHaveBeenCalledWith("/tmp/test-data", "New prompt");
+  });
+
+  it("does not call saveSystemPrompt when systemPrompt is unchanged", () => {
+    const config: AppConfig = { ...baseConfig };
+    const agent = createMockAgent([]);
+    const store = new ConversationStore();
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
+    const handler = extractHandler(router, "put", "/api/settings");
+
+    vi.mocked(saveSystemPrompt).mockClear();
+
+    const req = { body: { systemPrompt: baseConfig.systemPrompt } } as Request;
+    const res = createMockResponse();
+
+    handler(req, res, vi.fn());
+
+    expect(saveSystemPrompt).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/settings/skill-files", () => {
@@ -615,7 +654,7 @@ describe("POST /api/settings/skill-files", () => {
     const config: AppConfig = { ...baseConfig, skillFiles: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/skill-files");
 
     const req = { body: { name: "Rust tips", content: "# Tips\nBe safe.", order: 0 } } as Request;
@@ -636,7 +675,7 @@ describe("POST /api/settings/skill-files", () => {
     const config: AppConfig = { ...baseConfig, skillFiles: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/skill-files");
 
     const req = { body: { name: "Empty", content: "" } } as Request;
@@ -652,7 +691,7 @@ describe("POST /api/settings/skill-files", () => {
     const config: AppConfig = { ...baseConfig, skillFiles: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/skill-files");
 
     const req = { body: { content: "some content" } } as Request;
@@ -670,7 +709,7 @@ describe("POST /api/settings/skill-files", () => {
     };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/skill-files");
 
     const req = { body: { name: "Second", content: "y" } } as Request;
@@ -691,7 +730,7 @@ describe("DELETE /api/settings/skill-files/:id", () => {
     };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "delete", "/api/settings/skill-files/:id");
 
     const req = { params: { id: "sf-1" } } as unknown as Request;
@@ -708,7 +747,7 @@ describe("DELETE /api/settings/skill-files/:id", () => {
     const config: AppConfig = { ...baseConfig, skillFiles: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "delete", "/api/settings/skill-files/:id");
 
     const req = { params: { id: "non-existent" } } as unknown as Request;
@@ -725,7 +764,7 @@ describe("POST /api/settings/mcp-servers", () => {
     const config: AppConfig = { ...baseConfig, mcpServers: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/mcp-servers");
 
     const req = {
@@ -751,7 +790,7 @@ describe("POST /api/settings/mcp-servers", () => {
     const config: AppConfig = { ...baseConfig, mcpServers: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/mcp-servers");
 
     const req = { body: { name: "search" } } as Request;
@@ -767,7 +806,7 @@ describe("POST /api/settings/mcp-servers", () => {
     const config: AppConfig = { ...baseConfig, mcpServers: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/mcp-servers");
 
     const req = { body: { name: "tool", command: "node" } } as Request;
@@ -787,7 +826,7 @@ describe("POST /api/settings/mcp-servers — env validation", () => {
     const config: AppConfig = { ...baseConfig, mcpServers: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/mcp-servers");
 
     const req = { body: { name: "srv", command: "npx", env: ["NOT_VALID"] } } as Request;
@@ -805,7 +844,7 @@ describe("POST /api/settings/mcp-servers — env validation", () => {
     const config: AppConfig = { ...baseConfig, mcpServers: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/mcp-servers");
 
     const req = { body: { name: "srv", command: "npx", env: null } } as Request;
@@ -823,7 +862,7 @@ describe("POST /api/settings/mcp-servers — env validation", () => {
     const config: AppConfig = { ...baseConfig, mcpServers: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/mcp-servers");
 
     const req = { body: { name: "srv", command: "npx", env: { KEY: 123 } } } as Request;
@@ -841,7 +880,7 @@ describe("POST /api/settings/mcp-servers — env validation", () => {
     const config: AppConfig = { ...baseConfig, mcpServers: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/mcp-servers");
 
     const req = {
@@ -861,7 +900,7 @@ describe("POST /api/settings/mcp-servers — env validation", () => {
     const config: AppConfig = { ...baseConfig, mcpServers: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/mcp-servers");
 
     const req = {
@@ -881,7 +920,7 @@ describe("POST /api/settings/mcp-servers — env validation", () => {
     const config: AppConfig = { ...baseConfig, mcpServers: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/mcp-servers");
 
     const req = { body: { name: "srv", command: "npx" } } as Request;
@@ -933,7 +972,7 @@ describe("POST /api/settings/mcp-servers — Property: Invalid env payloads are 
           const config: AppConfig = { ...baseConfig, mcpServers: [] };
           const agent = createMockAgent([]);
           const store = new ConversationStore();
-          const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+          const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
           const handler = extractHandler(router, "post", "/api/settings/mcp-servers");
 
           const req = { body: { name: "srv", command: "npx", env: invalidEnv } } as Request;
@@ -964,7 +1003,7 @@ describe("POST /api/settings/mcp-servers — Property: Empty keys are stripped f
           const config: AppConfig = { ...baseConfig, mcpServers: [] };
           const agent = createMockAgent([]);
           const store = new ConversationStore();
-          const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+          const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
           const handler = extractHandler(router, "post", "/api/settings/mcp-servers");
 
           const req = { body: { name: "srv", command: "npx", env: envInput } } as Request;
@@ -1004,7 +1043,7 @@ describe("POST /api/settings/mcp-servers — MCP failure graceful degradation", 
       new Error("MCP server unreachable")
     );
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/mcp-servers");
 
     const req = {
@@ -1035,7 +1074,7 @@ describe("DELETE /api/settings/mcp-servers/:id", () => {
     };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "delete", "/api/settings/mcp-servers/:id");
 
     const req = { params: { id: "mcp-1" } } as unknown as Request;
@@ -1054,7 +1093,7 @@ describe("DELETE /api/settings/mcp-servers/:id", () => {
     const config: AppConfig = { ...baseConfig, mcpServers: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "delete", "/api/settings/mcp-servers/:id");
 
     const req = { params: { id: "non-existent" } } as unknown as Request;
@@ -1071,7 +1110,7 @@ describe("Skill file reordering", () => {
     const config: AppConfig = { ...baseConfig, skillFiles: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/skill-files");
 
     // Add three skill files with explicit order values
@@ -1104,7 +1143,7 @@ describe("Skill file reordering", () => {
     const config: AppConfig = { ...baseConfig, skillFiles: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/skill-files");
 
     // Add files without specifying order — should auto-assign 0, 1, 2
@@ -1133,7 +1172,7 @@ describe("Skill file reordering", () => {
     };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const deleteHandler = extractHandler(router, "delete", "/api/settings/skill-files/:id");
 
     // Remove the middle file
@@ -1152,7 +1191,7 @@ describe("Skill file binary content validation", () => {
     const config: AppConfig = { ...baseConfig, skillFiles: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/skill-files");
 
     const req = { body: { name: "binary.bin", content: "hello\0world" } } as Request;
@@ -1170,7 +1209,7 @@ describe("Skill file binary content validation", () => {
     const config: AppConfig = { ...baseConfig, skillFiles: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/skill-files");
 
     const req = { body: { name: "nulls.bin", content: "\0\0\0" } } as Request;
@@ -1186,7 +1225,7 @@ describe("Skill file binary content validation", () => {
     const config: AppConfig = { ...baseConfig, skillFiles: [] };
     const agent = createMockAgent([]);
     const store = new ConversationStore();
-    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config, library: mockLibrary, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/settings/skill-files");
 
     const req = {
@@ -1219,7 +1258,7 @@ describe("POST /api/conversations/new", () => {
 
   it("creates a new conversation and returns 201 with id", async () => {
     const agent = createMockAgent([]);
-    const router = createRouter({ store, agent, config: baseConfig, library, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/conversations/new");
 
     const req = {} as Request;
@@ -1240,7 +1279,7 @@ describe("POST /api/conversations/new", () => {
     const emptyId = store.getConversation()!.id;
 
     const agent = createMockAgent([]);
-    const router = createRouter({ store, agent, config: baseConfig, library, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/conversations/new");
 
     const req = {} as Request;
@@ -1259,7 +1298,7 @@ describe("POST /api/conversations/new", () => {
     const existingId = store.getConversation()!.id;
 
     const agent = createMockAgent([]);
-    const router = createRouter({ store, agent, config: baseConfig, library, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/conversations/new");
 
     const req = {} as Request;
@@ -1277,7 +1316,7 @@ describe("POST /api/conversations/new", () => {
     library.save = vi.fn(async () => { throw new Error("disk full"); });
 
     const agent = createMockAgent([]);
-    const router = createRouter({ store, agent, config: baseConfig, library, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager });
+    const router = createRouter({ store, agent, config: baseConfig, library, titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data" });
     const handler = extractHandler(router, "post", "/api/conversations/new");
 
     const req = {} as Request;

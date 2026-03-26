@@ -54,3 +54,4 @@ npm run build
 | `PORT` | `3000` | Server port |
 | `BEDROCK_MODEL_ID` | `qwen.qwen3-vl-235b-a22b` | Bedrock model ID for main agent |
 | `TITLE_MODEL_ID` | (falls back to `BEDROCK_MODEL_ID`) | Bedrock model ID for title generation |
+| `MARGINALIA_DATA_DIR` | `~/.config/marginalia/` (Linux/macOS), `%APPDATA%/marginalia/` (Windows) | Override base data directory. Relative paths resolve against cwd. |

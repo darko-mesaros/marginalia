@@ -7,7 +7,7 @@ Marginalia is a web-based LLM explainer tool. Users ask a question, receive a ma
 - **Main thread**: The primary Q&A conversation rendered as a document
 - **Side thread**: A margin note conversation anchored to a specific text selection in the main thread
 - **Context awareness**: The LLM sees the full main thread + all side thread discussions when answering any question
-- **Continuation**: Users can continue the main conversation after side notes have been added
+- **Continuation**: Users can continue the main conversation after side notes have been added — continuation questions render as styled card elements (blue left border, light background) between the `<hr>` divider and the assistant response
 
 ## Key Behaviors
 
@@ -35,9 +35,11 @@ Marginalia is a web-based LLM explainer tool. Users ask a question, receive a ma
 
 ## Persistence
 
-Conversations are auto-saved to `./data/conversations/{id}.json` after every message. Each conversation has a `title` (generated asynchronously from the first question via a separate Bedrock model call) and an `updatedAt` timestamp bumped on every mutation.
+Conversations are auto-saved to `{dataDir}/chats/{id}.json` after every message, where `dataDir` defaults to `~/.config/marginalia/` (overridable via `MARGINALIA_DATA_DIR`). Each conversation has a `title` (generated asynchronously from the first question via a separate Bedrock model call) and an `updatedAt` timestamp bumped on every mutation.
 
-MCP server configurations are persisted to `./data/mcp.json` in a VS Code-compatible format (top-level `mcpServers` map keyed by name). The file is loaded on startup and written atomically on every add/remove/toggle. Servers can be enabled or disabled without removal.
+MCP server configurations are persisted to `{dataDir}/mcp.json` in a VS Code-compatible format (top-level `mcpServers` map keyed by name). The file is loaded on startup and written atomically on every add/remove/toggle. Servers can be enabled or disabled without removal.
+
+The system prompt is persisted to `{dataDir}/system-prompt.md`. When updated via `PUT /api/settings`, the new prompt is saved to disk. An empty prompt deletes the file and reverts to the built-in default. On startup, the persisted prompt is loaded if present.
 
 ## Conversation Library UI
 

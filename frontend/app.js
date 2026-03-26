@@ -398,7 +398,7 @@ async function loadConversation(id) {
         isFirstUser = false;
 
         const questionDiv = document.createElement("div");
-        questionDiv.style.cssText = "font-weight: 600; margin-bottom: 12px; color: var(--color-text-secondary);";
+        questionDiv.style.cssText = "font-weight: 600; margin-bottom: 16px; padding: 10px 14px; background: #f0f4f8; border-left: 3px solid var(--color-primary); border-radius: 6px; color: var(--color-text); font-size: 0.95rem;";
         questionDiv.textContent = msg.content;
         mainPanel.appendChild(questionDiv);
       } else if (msg.role === "assistant") {
@@ -805,6 +805,11 @@ async function submitContinuation(question) {
   const divider = document.createElement("hr");
   divider.className = "continuation-divider";
   mainPanel.appendChild(divider);
+
+  const questionDiv = document.createElement("div");
+  questionDiv.style.cssText = "font-weight: 600; margin-bottom: 16px; padding: 10px 14px; background: #f0f4f8; border-left: 3px solid var(--color-primary); border-radius: 6px; color: var(--color-text); font-size: 0.95rem;";
+  questionDiv.textContent = question;
+  mainPanel.appendChild(questionDiv);
 
   // Create a new section for the response
   const tempId = uid();

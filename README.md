@@ -40,6 +40,7 @@ Opens on [http://localhost:3000](http://localhost:3000).
 |---|---|---|
 | `PORT` | `3000` | Server port |
 | `BEDROCK_MODEL_ID` | `qwen.qwen3-vl-235b-a22b` | Bedrock model to use |
+| `MARGINALIA_DATA_DIR` | `~/.config/marginalia/` | Override data/config directory |
 
 If you want to start it with a different model you can do:
 ```bash
@@ -60,7 +61,7 @@ Uses `tsx watch` for auto-reload on file changes.
 npm test
 ```
 
-Runs 180 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across models, context assembly, conversation ops, validation, agent, retry, SSE, routes, layout, markdown rendering, and MCP config management.
+Runs 247 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across models, context assembly, conversation ops, validation, agent, retry, SSE, routes, layout, markdown rendering, MCP config management, data directory resolution, and system prompt persistence.
 
 ## How It Works
 
@@ -69,7 +70,7 @@ Runs 180 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across
 3. Select any text in the explanation > a popover appears > ask a side question
 4. The answer appears as a margin note anchored to your selection with some SVG lines
 5. Each margin note supports follow-up questions within its own thread
-6. Continue the main conversation below, the **LLM sees all margin note context**
+6. Continue the main conversation below — your follow-up questions appear as styled cards (blue left border, light background) above each response, and the **LLM sees all margin note context**
 
 ## Stack
 
@@ -79,11 +80,30 @@ Runs 180 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across
 - Vanilla HTML/JS frontend (no build step)
 - marked.js, highlight.js, tippy.js (this one caused me troubl), DOMPurify via CDN
 - CSS Custom Highlight API for text anchoring
-- MCP tool integration via settings UI with persistent config (`./data/mcp.json`)
+- MCP tool integration via settings UI with persistent config
+- Persistent system prompt (survives restarts, stored in `system-prompt.md`)
+- Graceful MCP server shutdown on SIGINT/SIGTERM
+
+## Data Directory
+
+By default, Marginalia stores all data and config in `~/.config/marginalia/`:
+
+```
+~/.config/marginalia/
+├── chats/              # Conversation JSON files
+│   └── {uuid}.json
+├── mcp.json            # MCP server configurations
+└── system-prompt.md    # Custom system prompt (optional)
+```
+
+Override with `MARGINALIA_DATA_DIR`:
+```bash
+MARGINALIA_DATA_DIR=./local-data npm start
+```
 
 ## MCP Server Configuration
 
-MCP servers can be configured through the settings UI or by editing `./data/mcp.json` directly. The file follows the VS Code/Cursor/Kiro convention:
+MCP servers can be configured through the settings UI or by editing `mcp.json` in your data directory (`~/.config/marginalia/mcp.json` by default). The file follows the VS Code/Cursor/Kiro convention:
 
 ```json
 {
