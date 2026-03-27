@@ -11,7 +11,8 @@ marginalia/
 │   ├── agent.ts                # MarginaliaAgent — creates a fresh Strands agent per request, passes full reconstructed context, translates SDK events to SSE stream; disconnectAll() for graceful shutdown
 │   ├── data-dir.ts             # resolveDataDir() — single source of truth for base data directory (env var override or platform default)
 │   ├── system-prompt.ts        # loadSystemPrompt(dataDir) / saveSystemPrompt(dataDir, content) — persistent system prompt I/O
-│   ├── routes.ts               # Orchestration hub — validation, store mutation, context assembly, agent invocation, SSE streaming, persistence saves, settings endpoints
+│   ├── routes.ts               # Orchestration hub — validation, store mutation, context assembly, agent invocation, SSE streaming, persistence saves, settings endpoints, conversation export
+│   ├── exporters.ts            # Pure exporter functions: sanitiseTitle(), exportMarkdown(), exportHtml() — Markdown/HTML conversation export with side thread rendering
 │   ├── persistence-adapter.ts  # PersistenceAdapter interface + JsonFilePersistenceAdapter (JSON file I/O under dataDir/chats/)
 │   ├── conversation-library.ts # ConversationLibrary — CRUD wrapper over PersistenceAdapter with typed errors (LibraryError)
 │   ├── title-generator.ts      # TitleGenerator — fire-and-forget async title generation via a separate Bedrock model call; processTitle() strips markdown formatting before trim/truncate
@@ -46,6 +47,7 @@ marginalia/
 - **Typed error boundaries**: `PersistenceError` for storage I/O, `LibraryError` (with `NOT_FOUND` / `INTERNAL` codes) for route-level error handling — routes never inspect raw `fs` error codes
 - **Centralized data directory**: `resolveDataDir()` in `data-dir.ts` is the single source of truth for the base data directory — checks `MARGINALIA_DATA_DIR` env var first, falls back to `~/.config/marginalia/` (Linux/macOS) or `%APPDATA%/marginalia/` (Windows)
 - **Persistent system prompt**: System prompt is loaded from `dataDir/system-prompt.md` on startup and saved on change via `PUT /api/settings`. Empty prompt deletes the file and reverts to the built-in default.
+- **Conversation export**: Pure exporter functions in `exporters.ts` (`Conversation → string`) produce Markdown, HTML, and JSON output. The HTML exporter uses `marked` server-side, inlines all CSS, duplicates the 32-color palette, and adds clickable numbered badges linking highlights to margin notes via HTML anchor links. JSON export serves the raw persisted file with zero transformation.
 - **Graceful shutdown**: `registerShutdownHandlers()` in `index.ts` listens for SIGINT/SIGTERM, calls `agent.disconnectAll()` with a 5-second timeout to prevent orphaned MCP child processes
 
 ## Conventions

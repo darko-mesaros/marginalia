@@ -58,6 +58,9 @@ const marginNotePanel = document.getElementById("margin-note-panel");
 const continuationInput = document.getElementById("continuation-input");
 const continueBtn = document.getElementById("continue-btn");
 const newConversationBtn = document.getElementById("new-conversation-btn");
+const exportWrapper = document.getElementById("export-wrapper");
+const exportBtn = document.getElementById("export-btn");
+const exportDropdown = document.getElementById("export-dropdown");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -319,6 +322,9 @@ async function handleNewConversation() {
     questionInput.value = "";
     questionInput.focus();
 
+    // Hide export button (no messages in new conversation)
+    updateExportButtonVisibility();
+
     // Refresh sidebar list
     fetchConversationList();
   } catch (err) {
@@ -504,6 +510,9 @@ async function loadConversation(id) {
 
     // Redraw connector lines after all notes and highlights are rendered
     markConnectorsDirty();
+
+    // Update export button visibility
+    updateExportButtonVisibility();
 
   } catch (err) {
     // On non-404 error: show error, don't modify current state
@@ -759,6 +768,7 @@ async function submitQuestion(question) {
     showError(section, `Network error: ${err.message}`);
   } finally {
     state.ui.loading = false;
+    updateExportButtonVisibility();
   }
 }
 
@@ -924,6 +934,7 @@ async function submitContinuation(question) {
   } finally {
     state.ui.loading = false;
     enableContinuationInput();
+    updateExportButtonVisibility();
   }
 }
 
@@ -1969,6 +1980,125 @@ document.addEventListener("mousedown", (e) => {
 
 // Wire up the mouseup handler on the main panel
 mainPanel.addEventListener("mouseup", handleMainPanelMouseUp);
+
+// ---------------------------------------------------------------------------
+// Export button logic
+// ---------------------------------------------------------------------------
+
+/**
+ * Update export button visibility based on conversation state.
+ * Visible only when conversation has at least one message.
+ */
+function updateExportButtonVisibility() {
+  const hasMessages = state.conversation.mainThread.length > 0;
+  exportWrapper.style.display = hasMessages ? "" : "none";
+}
+
+/** Close the export dropdown. */
+function closeExportDropdown() {
+  exportDropdown.classList.remove("open");
+}
+
+/** Toggle the export dropdown open/closed. */
+function toggleExportDropdown() {
+  if (exportBtn.disabled) return;
+  exportDropdown.classList.toggle("open");
+  if (exportDropdown.classList.contains("open")) {
+    // Focus the first option for keyboard navigation
+    const first = exportDropdown.querySelector(".export-option");
+    if (first) first.focus();
+  }
+}
+
+/**
+ * Initiate an export download for the given format.
+ * @param {string} format — "markdown", "html", or "json"
+ */
+async function initiateExport(format) {
+  closeExportDropdown();
+  if (!state.conversation.id) return;
+
+  exportBtn.disabled = true;
+  try {
+    const res = await fetch(`/api/conversations/${state.conversation.id}/export?format=${format}`);
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`Export failed (${res.status}): ${errText}`);
+      return;
+    }
+
+    // Extract filename from Content-Disposition header if available
+    let filename = `conversation.${format === "markdown" ? "md" : format}`;
+    const disposition = res.headers.get("Content-Disposition");
+    if (disposition) {
+      const match = disposition.match(/filename="?([^";\n]+)"?/);
+      if (match) filename = match[1];
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("Export error:", err);
+  } finally {
+    exportBtn.disabled = false;
+  }
+}
+
+// Toggle dropdown on button click
+exportBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  toggleExportDropdown();
+});
+
+// Handle format selection
+for (const option of exportDropdown.querySelectorAll(".export-option")) {
+  option.addEventListener("click", () => {
+    initiateExport(option.dataset.format);
+  });
+}
+
+// Keyboard navigation within dropdown
+exportDropdown.addEventListener("keydown", (e) => {
+  const options = [...exportDropdown.querySelectorAll(".export-option")];
+  const current = document.activeElement;
+  const idx = options.indexOf(current);
+
+  switch (e.key) {
+    case "ArrowDown":
+      e.preventDefault();
+      if (idx < options.length - 1) options[idx + 1].focus();
+      break;
+    case "ArrowUp":
+      e.preventDefault();
+      if (idx > 0) options[idx - 1].focus();
+      break;
+    case "Enter":
+      e.preventDefault();
+      if (current && current.dataset.format) {
+        initiateExport(current.dataset.format);
+      }
+      break;
+    case "Escape":
+      e.preventDefault();
+      closeExportDropdown();
+      exportBtn.focus();
+      break;
+  }
+});
+
+// Close dropdown when clicking outside
+document.addEventListener("click", (e) => {
+  if (!exportWrapper.contains(e.target)) {
+    closeExportDropdown();
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Settings Dialog

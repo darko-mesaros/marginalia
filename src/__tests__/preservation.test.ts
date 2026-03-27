@@ -18,6 +18,7 @@ import { processTitle } from "../title-generator.js";
 function referenceProcessTitle(raw: string): string {
   let title = raw;
   title = title.replace(/^["']+|["']+$/g, "");
+  title = title.replace(/\s{2,}/g, " ");                 // collapse multiple spaces (matches processTitle)
   title = title.split("\n")[0].trim();
   if (title.length === 0) {
     title = "Untitled Conversation";

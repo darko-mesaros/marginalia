@@ -24,7 +24,6 @@ vi.mock("@modelcontextprotocol/sdk/client/stdio.js", () => ({
 }));
 
 const defaultConfig: AppConfig = {
-  port: 3000,
   bedrockModelId: "test-model",
   systemPrompt: "test",
   mcpServers: [],

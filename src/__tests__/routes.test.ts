@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import fc from "fast-check";
 import { createRouter } from "../routes.js";
 import { ConversationStore } from "../conversation-store.js";
-import type { AppConfig } from "../models.js";
+import type { AppConfig, Conversation } from "../models.js";
 import type { MarginaliaAgent, StreamEvent } from "../agent.js";
 import type { Request, Response } from "express";
+import { LibraryError } from "../conversation-library.js";
 import { saveSystemPrompt } from "../system-prompt.js";
 
 vi.mock("../system-prompt.js", () => ({
@@ -1328,4 +1329,285 @@ describe("POST /api/conversations/new", () => {
     const body = res._jsonBody() as any;
     expect(body.error).toBeDefined();
   });
+});
+
+
+// ---------------------------------------------------------------------------
+// GET /api/conversations/:id/export — Unit tests (Task 5.2)
+// Requirements: 1.2, 1.3, 1.4, 1.5, 1.6
+// ---------------------------------------------------------------------------
+
+/**
+ * Enhanced mock response that also captures `send()` calls used by the export route.
+ */
+function createExportMockResponse() {
+  const base = createMockResponse();
+  let sentBody: string | null = null;
+
+  const res = base as any;
+  res.send = (body: string) => {
+    sentBody = body;
+    res.end();
+    return res;
+  };
+  res._sentBody = () => sentBody;
+
+  return res as MockResponse & { _sentBody: () => string | null };
+}
+
+describe("GET /api/conversations/:id/export", () => {
+  const sampleConversation: Conversation = {
+    id: "conv-123",
+    title: "Test Conversation",
+    mainThread: [
+      { id: "m1", role: "user", content: "Hello", toolInvocations: [], timestamp: new Date() },
+      { id: "m2", role: "assistant", content: "Hi there", toolInvocations: [], timestamp: new Date() },
+    ],
+    sideThreads: [],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  function buildLibrary(overrides: Partial<typeof mockLibrary> = {}) {
+    return {
+      ...mockLibrary,
+      ...overrides,
+    } as any;
+  }
+
+  function buildRouter(libraryOverrides: Partial<typeof mockLibrary> = {}, dataDir = "/tmp/test-data") {
+    const store = new ConversationStore();
+    const agent = createMockAgent([]);
+    const library = buildLibrary(libraryOverrides);
+    return createRouter({
+      store,
+      agent,
+      config: baseConfig,
+      library,
+      titleGenerator: mockTitleGenerator,
+      mcpConfigManager: mockMcpConfigManager,
+      dataDir,
+    });
+  }
+
+  // --- 400 responses ---
+
+  it("returns 400 when format query parameter is missing", async () => {
+    const router = buildRouter();
+    const handler = extractHandler(router, "get", "/api/conversations/:id/export");
+
+    const req = { params: { id: "conv-123" }, query: {} } as unknown as Request;
+    const res = createExportMockResponse();
+
+    await handler(req, res, vi.fn());
+
+    expect(res.statusCode).toBe(400);
+    const body = res._jsonBody() as any;
+    expect(body.error).toBe("Invalid or missing format. Supported formats: markdown, html, json");
+  });
+
+  it("returns 400 when format is an unsupported value", async () => {
+    const router = buildRouter();
+    const handler = extractHandler(router, "get", "/api/conversations/:id/export");
+
+    const req = { params: { id: "conv-123" }, query: { format: "pdf" } } as unknown as Request;
+    const res = createExportMockResponse();
+
+    await handler(req, res, vi.fn());
+
+    expect(res.statusCode).toBe(400);
+    const body = res._jsonBody() as any;
+    expect(body.error).toContain("Invalid or missing format");
+  });
+
+  // --- 404 responses ---
+
+  it("returns 404 for non-existent conversation (markdown)", async () => {
+    const library = buildLibrary({
+      load: vi.fn(async () => { throw new LibraryError("Conversation not found: conv-999", "NOT_FOUND"); }),
+    });
+    const store = new ConversationStore();
+    const agent = createMockAgent([]);
+    const router = createRouter({
+      store, agent, config: baseConfig, library,
+      titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data",
+    });
+    const handler = extractHandler(router, "get", "/api/conversations/:id/export");
+
+    const req = { params: { id: "conv-999" }, query: { format: "markdown" } } as unknown as Request;
+    const res = createExportMockResponse();
+
+    await handler(req, res, vi.fn());
+
+    expect(res.statusCode).toBe(404);
+    const body = res._jsonBody() as any;
+    expect(body.error).toBe("Conversation not found");
+  });
+
+  // --- Markdown export: Content-Type and Content-Disposition ---
+
+  it("returns correct headers for markdown export", async () => {
+    const library = buildLibrary({
+      load: vi.fn(async () => sampleConversation),
+    });
+    const store = new ConversationStore();
+    const agent = createMockAgent([]);
+    const router = createRouter({
+      store, agent, config: baseConfig, library,
+      titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data",
+    });
+    const handler = extractHandler(router, "get", "/api/conversations/:id/export");
+
+    const req = { params: { id: "conv-123" }, query: { format: "markdown" } } as unknown as Request;
+    const res = createExportMockResponse();
+
+    await handler(req, res, vi.fn());
+
+    expect(res._headers["Content-Type"]).toBe("text/markdown; charset=utf-8");
+    expect(res._headers["Content-Disposition"]).toBe('attachment; filename="Test Conversation.md"');
+    expect(res._sentBody()).toBeTruthy();
+    expect(res._sentBody()!.startsWith("# Test Conversation")).toBe(true);
+  });
+
+  // --- HTML export: Content-Type and Content-Disposition ---
+
+  it("returns correct headers for html export", async () => {
+    const library = buildLibrary({
+      load: vi.fn(async () => sampleConversation),
+    });
+    const store = new ConversationStore();
+    const agent = createMockAgent([]);
+    const router = createRouter({
+      store, agent, config: baseConfig, library,
+      titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data",
+    });
+    const handler = extractHandler(router, "get", "/api/conversations/:id/export");
+
+    const req = { params: { id: "conv-123" }, query: { format: "html" } } as unknown as Request;
+    const res = createExportMockResponse();
+
+    await handler(req, res, vi.fn());
+
+    expect(res._headers["Content-Type"]).toBe("text/html; charset=utf-8");
+    expect(res._headers["Content-Disposition"]).toBe('attachment; filename="Test Conversation.html"');
+    expect(res._sentBody()).toBeTruthy();
+    expect(res._sentBody()!).toContain("<!DOCTYPE html>");
+  });
+
+  // --- JSON export: Content-Type, Content-Disposition, raw file content ---
+
+  it("returns correct headers and raw file content for json export", async () => {
+    const rawJson = JSON.stringify({ id: "conv-123", title: "Test Conversation", mainThread: [] });
+
+    const library = buildLibrary({
+      exists: vi.fn(async () => true),
+    });
+
+    // Mock fs.readFile for the JSON export path
+    const fsReadFile = vi.fn(async () => rawJson);
+    const originalFsReadFile = (await import("node:fs/promises")).readFile;
+
+    // We need to mock at the module level — use vi.mock approach
+    // Instead, we'll test via the route handler directly by mocking the library
+    // and using a temp directory with a real file
+    const os = await import("node:os");
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "export-test-"));
+    const chatsDir = path.join(tmpDir, "chats");
+    await fs.mkdir(chatsDir, { recursive: true });
+    await fs.writeFile(path.join(chatsDir, "conv-123.json"), rawJson, "utf-8");
+
+    const store = new ConversationStore();
+    const agent = createMockAgent([]);
+    const router = createRouter({
+      store, agent, config: baseConfig, library,
+      titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: tmpDir,
+    });
+    const handler = extractHandler(router, "get", "/api/conversations/:id/export");
+
+    const req = { params: { id: "conv-123" }, query: { format: "json" } } as unknown as Request;
+    const res = createExportMockResponse();
+
+    await handler(req, res, vi.fn());
+
+    expect(res._headers["Content-Type"]).toBe("application/json; charset=utf-8");
+    expect(res._headers["Content-Disposition"]).toBe('attachment; filename="Test Conversation.json"');
+    expect(res._sentBody()).toBe(rawJson);
+
+    // Cleanup
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns 404 for json export when conversation does not exist", async () => {
+    const library = buildLibrary({
+      exists: vi.fn(async () => false),
+    });
+    const store = new ConversationStore();
+    const agent = createMockAgent([]);
+    const router = createRouter({
+      store, agent, config: baseConfig, library,
+      titleGenerator: mockTitleGenerator, mcpConfigManager: mockMcpConfigManager, dataDir: "/tmp/test-data",
+    });
+    const handler = extractHandler(router, "get", "/api/conversations/:id/export");
+
+    const req = { params: { id: "nonexistent" }, query: { format: "json" } } as unknown as Request;
+    const res = createExportMockResponse();
+
+    await handler(req, res, vi.fn());
+
+    expect(res.statusCode).toBe(404);
+    const body = res._jsonBody() as any;
+    expect(body.error).toBe("Conversation not found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature: conversation-export, Property 3: Invalid format rejection
+// Validates: Requirements 1.2
+// ---------------------------------------------------------------------------
+
+describe("GET /api/conversations/:id/export — Property 3: Invalid format rejection", () => {
+  it(
+    "Property 3: Invalid format rejection — random strings not in {markdown, html, json} yield 400\n  Validates: Requirements 1.2",
+    () => {
+      const VALID_FORMATS = new Set(["markdown", "html", "json"]);
+
+      fc.assert(
+        fc.asyncProperty(
+          fc.string().filter((s) => !VALID_FORMATS.has(s)),
+          async (invalidFormat) => {
+            const store = new ConversationStore();
+            const agent = createMockAgent([]);
+            const router = createRouter({
+              store,
+              agent,
+              config: baseConfig,
+              library: mockLibrary,
+              titleGenerator: mockTitleGenerator,
+              mcpConfigManager: mockMcpConfigManager,
+              dataDir: "/tmp/test-data",
+            });
+            const handler = extractHandler(router, "get", "/api/conversations/:id/export");
+
+            const req = {
+              params: { id: "any-id" },
+              query: { format: invalidFormat },
+            } as unknown as Request;
+            const res = createMockResponse();
+
+            await handler(req, res, vi.fn());
+
+            expect(res.statusCode).toBe(400);
+            const body = res._jsonBody() as any;
+            expect(body.error).toBe(
+              "Invalid or missing format. Supported formats: markdown, html, json"
+            );
+          }
+        ),
+        { numRuns: 100 }
+      );
+    }
+  );
 });
