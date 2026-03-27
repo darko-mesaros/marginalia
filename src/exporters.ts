@@ -144,6 +144,50 @@ export function hexToRgba(hex: string, alpha: number): string {
 }
 
 /**
+ * Strip HTML tags from a string, returning only the text content.
+ */
+function stripHtmlTags(html: string): string {
+  return html.replace(/<[^>]*>/g, "");
+}
+
+/**
+ * Find the position in an HTML string where a plain-text needle occurs,
+ * accounting for HTML tags that interrupt the text flow.
+ * Returns the index in the HTML string where the match starts, or -1.
+ */
+function findTextInHtml(html: string, needle: string): { htmlStart: number; htmlEnd: number } | null {
+  if (!needle) return null;
+
+  // Build a mapping from text-content index to HTML index
+  const textToHtml: number[] = [];
+  let inTag = false;
+  for (let i = 0; i < html.length; i++) {
+    if (html[i] === "<") {
+      inTag = true;
+      continue;
+    }
+    if (html[i] === ">") {
+      inTag = false;
+      continue;
+    }
+    if (!inTag) {
+      textToHtml.push(i);
+    }
+  }
+
+  // Extract the plain text
+  const plainText = stripHtmlTags(html);
+
+  // Search for the needle in the plain text
+  const textPos = plainText.indexOf(needle);
+  if (textPos === -1) return null;
+
+  const htmlStart = textToHtml[textPos];
+  const htmlEnd = textToHtml[textPos + needle.length - 1] + 1;
+  return { htmlStart, htmlEnd };
+}
+
+/**
  * Escape HTML special characters to prevent XSS in user-generated content.
  */
 function escapeHtml(text: string): string {
@@ -199,8 +243,10 @@ export function exportHtml(conversation: Conversation): string {
 
       // Sort anchors by position in the text (later first) so insertions don't shift earlier offsets
       const sortedAnchors = [...anchored].sort((a, b) => {
-        const posA = html.indexOf(a.thread.anchor.selectedText);
-        const posB = html.indexOf(b.thread.anchor.selectedText);
+        const textA = a.thread.anchor.selectedText;
+        const textB = b.thread.anchor.selectedText;
+        const posA = html.indexOf(textA) !== -1 ? html.indexOf(textA) : (findTextInHtml(html, textA)?.htmlStart ?? html.length);
+        const posB = html.indexOf(textB) !== -1 ? html.indexOf(textB) : (findTextInHtml(html, textB)?.htmlStart ?? html.length);
         return posB - posA; // later positions first
       });
 
@@ -210,23 +256,27 @@ export function exportHtml(conversation: Conversation): string {
         const selectedText = thread.anchor.selectedText;
         const noteNum = threadIndex + 1;
         const badge = `<a href="#note-${noteNum}" class="note-badge" style="background-color: ${color};" id="ref-${noteNum}"><sup>${noteNum}</sup></a>`;
+        const markOpen = `<mark style="background-color: ${bgColor}">`;
+        const markClose = `</mark>`;
 
-        // Try to find the selectedText in the rendered HTML
+        // Strategy 1: Direct text search in rendered HTML (works when selectedText has no markdown)
         const pos = html.indexOf(selectedText);
         if (pos !== -1) {
-          const markOpen = `<mark style="background-color: ${bgColor}">`;
-          const markClose = `</mark>`;
           html = html.slice(0, pos) + markOpen + html.slice(pos, pos + selectedText.length) + markClose + badge + html.slice(pos + selectedText.length);
-        }
-        // If not found in HTML (markdown transformation changed it), try escaping
-        // the selectedText and searching again as fallback
-        else {
-          const escapedText = escapeHtml(selectedText);
-          const escapedPos = html.indexOf(escapedText);
-          if (escapedPos !== -1) {
-            const markOpen = `<mark style="background-color: ${bgColor}">`;
-            const markClose = `</mark>`;
-            html = html.slice(0, escapedPos) + markOpen + html.slice(escapedPos, escapedPos + escapedText.length) + markClose + badge + html.slice(escapedPos + escapedText.length);
+        } else {
+          // Strategy 2: Search for the plain text content within the HTML, ignoring tags.
+          // This handles cases where markdown formatting in selectedText was converted to HTML tags.
+          const match = findTextInHtml(html, selectedText);
+          if (match) {
+            html = html.slice(0, match.htmlStart) + markOpen + html.slice(match.htmlStart, match.htmlEnd) + markClose + badge + html.slice(match.htmlEnd);
+          } else {
+            // Strategy 3: Try HTML-escaped version of selectedText
+            const escapedText = escapeHtml(selectedText);
+            const escapedPos = html.indexOf(escapedText);
+            if (escapedPos !== -1) {
+              html = html.slice(0, escapedPos) + markOpen + html.slice(escapedPos, escapedPos + escapedText.length) + markClose + badge + html.slice(escapedPos + escapedText.length);
+            }
+            // If all strategies fail, the badge won't appear inline but the margin note card still renders
           }
         }
       }

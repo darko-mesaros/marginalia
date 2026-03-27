@@ -61,6 +61,7 @@ const newConversationBtn = document.getElementById("new-conversation-btn");
 const exportWrapper = document.getElementById("export-wrapper");
 const exportBtn = document.getElementById("export-btn");
 const exportDropdown = document.getElementById("export-dropdown");
+const collapseAllBtn = document.getElementById("collapse-all-btn");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -324,6 +325,9 @@ async function handleNewConversation() {
 
     // Hide export button (no messages in new conversation)
     updateExportButtonVisibility();
+    allNotesCollapsed = false;
+    updateCollapseAllIcon();
+    updateCollapseAllVisibility();
 
     // Refresh sidebar list
     fetchConversationList();
@@ -504,7 +508,8 @@ async function loadConversation(id) {
         thread.anchor.messageId,
         thread.anchor.startOffset,
         thread.anchor.endOffset,
-        i
+        i,
+        thread.anchor.selectedText
       );
     }
 
@@ -513,6 +518,9 @@ async function loadConversation(id) {
 
     // Update export button visibility
     updateExportButtonVisibility();
+    allNotesCollapsed = false;
+    updateCollapseAllIcon();
+    updateCollapseAllVisibility();
 
   } catch (err) {
     // On non-404 error: show error, don't modify current state
@@ -1404,9 +1412,10 @@ async function submitSideQuestion(selectedText, question, anchorPosition) {
               collapsed: false,
             };
             state.conversation.sideThreads.push(sideThread);
+            updateCollapseAllVisibility();
 
             // Highlight the anchored text in the main panel
-            highlightAnchor(anchorPosition.message_id, anchorPosition.start_offset, anchorPosition.end_offset, colorIndex);
+            highlightAnchor(anchorPosition.message_id, anchorPosition.start_offset, anchorPosition.end_offset, colorIndex, selectedText);
 
             // Store thread id on the note element for follow-up wiring
             noteUI.el.dataset.threadId = sideThread.id;
@@ -1459,10 +1468,11 @@ async function submitSideQuestion(selectedText, question, anchorPosition) {
             collapsed: false,
           };
           state.conversation.sideThreads.push(sideThread);
+          updateCollapseAllVisibility();
           noteUI.el.dataset.threadId = sideThread.id;
 
           // Highlight the anchored text in the main panel
-          highlightAnchor(anchorPosition.message_id, anchorPosition.start_offset, anchorPosition.end_offset, colorIndex);
+          highlightAnchor(anchorPosition.message_id, anchorPosition.start_offset, anchorPosition.end_offset, colorIndex, selectedText);
 
           // Re-layout margin notes after new note is fully rendered
           layoutMarginNotes();
@@ -1645,6 +1655,51 @@ function getHighlightStyleSheet() {
 }
 
 /**
+ * Search for a text string within a DOM element and return a Range covering it.
+ * Walks text nodes and finds the needle across node boundaries.
+ * @param {Element} container — the DOM element to search within
+ * @param {string} needle — the text to find
+ * @returns {Range|null}
+ */
+function findTextRange(container, needle) {
+  if (!needle) return null;
+
+  const textNodes = [];
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let fullText = "";
+  while (walker.nextNode()) {
+    textNodes.push({ node: walker.currentNode, start: fullText.length });
+    fullText += walker.currentNode.textContent;
+  }
+
+  const idx = fullText.indexOf(needle);
+  if (idx === -1) return null;
+
+  const endIdx = idx + needle.length;
+  const range = document.createRange();
+
+  for (let i = 0; i < textNodes.length; i++) {
+    const tn = textNodes[i];
+    const tnEnd = tn.start + tn.node.textContent.length;
+    if (idx >= tn.start && idx < tnEnd) {
+      range.setStart(tn.node, idx - tn.start);
+      break;
+    }
+  }
+
+  for (let i = 0; i < textNodes.length; i++) {
+    const tn = textNodes[i];
+    const tnEnd = tn.start + tn.node.textContent.length;
+    if (endIdx > tn.start && endIdx <= tnEnd) {
+      range.setEnd(tn.node, endIdx - tn.start);
+      break;
+    }
+  }
+
+  return range;
+}
+
+/**
  * Highlight a text range within a section using the CSS Custom Highlight API.
  * Walks the text node tree of the section identified by messageId, builds a
  * Range spanning [startOffset, endOffset] in character space, and registers
@@ -1655,15 +1710,17 @@ function getHighlightStyleSheet() {
  * @param {string} messageId  — data-message-id of the target <section>
  * @param {number} startOffset — character start offset relative to section text
  * @param {number} endOffset   — character end offset relative to section text
+ * @param {number} [colorIndex] — side thread index for color assignment
+ * @param {string} [selectedText] — anchor text for fallback text-search when offsets don't match
  */
-function highlightAnchor(messageId, startOffset, endOffset, colorIndex) {
+function highlightAnchor(messageId, startOffset, endOffset, colorIndex, selectedText) {
   // Graceful degradation: CSS Custom Highlight API not supported
   if (typeof CSS === "undefined" || !CSS.highlights) return;
 
   const section = mainPanel.querySelector(`section[data-message-id="${messageId}"]`);
   if (!section) return;
 
-  const range = document.createRange();
+  let range = document.createRange();
   const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT);
   let charCount = 0;
   let foundStart = false;
@@ -1685,6 +1742,23 @@ function highlightAnchor(messageId, startOffset, endOffset, colorIndex) {
     }
 
     charCount += nodeLen;
+  }
+
+  // Verify the range matches the expected selectedText; if not, fall back to text search
+  if (foundStart && selectedText && range.toString() !== selectedText) {
+    const fallbackRange = findTextRange(section, selectedText);
+    if (fallbackRange) {
+      range = fallbackRange;
+    }
+  }
+
+  // If offset-based approach failed entirely, try text search
+  if (!foundStart && selectedText) {
+    const fallbackRange = findTextRange(section, selectedText);
+    if (fallbackRange) {
+      range = fallbackRange;
+      foundStart = true;
+    }
   }
 
   // Only register if we successfully built a valid range
@@ -2097,6 +2171,53 @@ exportDropdown.addEventListener("keydown", (e) => {
 document.addEventListener("click", (e) => {
   if (!exportWrapper.contains(e.target)) {
     closeExportDropdown();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Collapse/Expand All Margin Notes
+// ---------------------------------------------------------------------------
+
+let allNotesCollapsed = false;
+
+function updateCollapseAllVisibility() {
+  const hasSideThreads = state.conversation.sideThreads.length > 0;
+  collapseAllBtn.style.display = hasSideThreads ? "" : "none";
+}
+
+function updateCollapseAllIcon() {
+  // Double chevron: down = expanded (can collapse), up = collapsed (can expand)
+  const svg = allNotesCollapsed
+    ? '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5-5 5 5"/><path d="M4 7l5-5 5 5"/></svg>'
+    : '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l5 5 5-5"/><path d="M4 11l5 5 5-5"/></svg>';
+  collapseAllBtn.innerHTML = svg;
+  collapseAllBtn.title = allNotesCollapsed ? "Expand all notes" : "Collapse all notes";
+  collapseAllBtn.setAttribute("aria-label", allNotesCollapsed ? "Expand all margin notes" : "Collapse all margin notes");
+}
+
+collapseAllBtn.addEventListener("click", () => {
+  allNotesCollapsed = !allNotesCollapsed;
+  updateCollapseAllIcon();
+
+  const notes = document.querySelectorAll(".margin-note");
+  for (const note of notes) {
+    const body = note.querySelector(".margin-note-body");
+    const toggle = note.querySelector(".margin-note-toggle");
+    if (!body) continue;
+
+    if (allNotesCollapsed) {
+      body.classList.add("collapsed");
+      if (toggle) {
+        toggle.textContent = "▸";
+        toggle.setAttribute("aria-label", "Expand note");
+      }
+    } else {
+      body.classList.remove("collapsed");
+      if (toggle) {
+        toggle.textContent = "▾";
+        toggle.setAttribute("aria-label", "Collapse note");
+      }
+    }
   }
 });
 
