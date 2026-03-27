@@ -397,6 +397,7 @@ describe("McpConfigManager", () => {
             library: mockLibrary,
             titleGenerator: mockTitleGen,
             mcpConfigManager: mockMcpCfgMgr,
+            dataDir: '/tmp/test-data',
           });
 
           const handler = extractHandler(router, "patch", "/api/settings/mcp-servers/:id");
@@ -521,6 +522,7 @@ describe("McpConfigManager", () => {
             library: mockLibrary,
             titleGenerator: mockTitleGen,
             mcpConfigManager: mockMcpCfgMgr,
+            dataDir: '/tmp/test-data',
           });
 
           const handler = extractHandler(router, "patch", "/api/settings/mcp-servers/:id");
@@ -646,6 +648,7 @@ describe("McpConfigManager", () => {
               library: mockLibrary,
               titleGenerator: mockTitleGen,
               mcpConfigManager: mockMcpCfgMgr,
+              dataDir: '/tmp/test-data',
             });
 
             const handler = extractHandler(router, "patch", "/api/settings/mcp-servers/:id");

@@ -61,7 +61,7 @@ Uses `tsx watch` for auto-reload on file changes.
 npm test
 ```
 
-Runs 238 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across models, context assembly, conversation ops, validation, agent, retry, SSE, routes, layout, markdown rendering, MCP config management, data directory resolution, and system prompt persistence.
+Runs 260 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across models, context assembly, conversation ops, validation, agent, retry, SSE, routes, layout, markdown rendering, MCP config management, data directory resolution, system prompt persistence, and conversation export.
 
 ## How It Works
 
@@ -71,6 +71,7 @@ Runs 238 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across
 4. The answer appears as a margin note anchored to your selection with some SVG lines
 5. Each margin note supports follow-up questions within its own thread
 6. Continue the main conversation below — your follow-up questions appear as styled cards (blue left border, light background) above each response, and the **LLM sees all margin note context**
+7. Export your conversation via the export button (top bar) — choose Markdown, HTML, or JSON. The HTML export is a self-contained file with the two-column layout, color-coded highlights, and clickable numbered badges that link inline annotations to their margin notes.
 
 ## Stack
 
@@ -82,6 +83,7 @@ Runs 238 tests (property-based + unit) (thank you Kiro ❤️) via Vitest across
 - CSS Custom Highlight API for text anchoring
 - MCP tool integration via settings UI with persistent config
 - Persistent system prompt (survives restarts, stored in `system-prompt.md`)
+- Conversation export: Markdown (side threads as blockquotes), self-contained HTML (two-column layout, numbered clickable badges), raw JSON
 - Graceful MCP server shutdown on SIGINT/SIGTERM
 
 ## Data Directory

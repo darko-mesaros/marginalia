@@ -10,7 +10,7 @@ import * as fc from "fast-check";
  * browser script with no module exports.
  */
 function toggleSidebar(
-  contentArea: { classList: DOMTokenList },
+  contentArea: { classList: { toggle(cls: string): boolean; contains(cls: string): boolean } },
   toggleBtn: { setAttribute: (name: string, value: string) => void },
   onOpen?: () => void,
 ) {
@@ -44,7 +44,7 @@ describe("Sidebar toggle consistency (Property 1)", () => {
             contains(cls: string) {
               return classes.has(cls);
             },
-          } as unknown as DOMTokenList;
+          } as { toggle(cls: string): boolean; contains(cls: string): boolean };
 
           let ariaLabel = "Open conversation library";
           const toggleBtn = {

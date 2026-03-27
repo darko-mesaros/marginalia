@@ -21,6 +21,7 @@ Marginalia is a web-based LLM explainer tool. Users ask a question, receive a ma
 - Tool invocations render as compact inline indicators (`🔧 Used {tool_name}`) — raw tool output is not shown to the user
 - Conversation titles are markdown-stripped (`processTitle()` removes headings, bold, italic, links, etc.) before display
 - Skill files can be added to extend the system prompt
+- Conversations can be exported as Markdown (side threads as blockquotes), self-contained HTML (two-column layout with clickable numbered badges linking highlights to margin notes), or raw JSON (byte-identical to persisted format)
 
 ## API Endpoints
 
@@ -32,6 +33,7 @@ Marginalia is a web-based LLM explainer tool. Users ask a question, receive a ma
 - `GET /api/conversations/:id` — load a saved conversation (replaces active conversation in store)
 - `POST /api/conversations/new` — start a fresh conversation (cleans up empty ones)
 - `PATCH /api/settings/mcp-servers/:id` — toggle an MCP server's enabled state (`{ "enabled": bool }`)
+- `GET /api/conversations/:id/export?format=markdown|html|json` — export a conversation as Markdown, self-contained HTML, or raw JSON (triggers file download)
 
 ## Persistence
 

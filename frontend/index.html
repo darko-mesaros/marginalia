@@ -393,6 +393,60 @@
       cursor: not-allowed;
     }
 
+    /* ── Export Button ── */
+    #export-btn {
+      padding: 10px 12px;
+      font-size: 1.1rem;
+      background: transparent;
+      color: var(--color-text-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      cursor: pointer;
+      line-height: 1;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #export-btn:hover { background: var(--color-bg); color: var(--color-text); }
+    #export-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .export-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 0;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      z-index: 100;
+      min-width: 160px;
+      padding: 4px 0;
+    }
+
+    .export-dropdown.open { display: block; }
+
+    .export-option {
+      display: block;
+      width: 100%;
+      padding: 8px 14px;
+      font-size: 0.88rem;
+      background: none;
+      border: none;
+      text-align: left;
+      cursor: pointer;
+      color: var(--color-text);
+      font-family: inherit;
+    }
+
+    .export-option:hover,
+    .export-option:focus {
+      background: var(--color-bg);
+      outline: none;
+    }
+
     /* ── Settings Button ── */
     #settings-btn {
       padding: 10px 12px;
@@ -800,6 +854,20 @@
     <label for="question-input" class="sr-only">Ask a question</label>
     <input type="text" id="question-input" placeholder="Ask a question…" aria-label="Ask a question" autocomplete="off">
     <button id="ask-btn" type="button">Ask</button>
+    <div id="export-wrapper" style="position: relative; display: none;">
+      <button id="export-btn" type="button" aria-label="Export conversation" title="Export conversation">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 3v9"/>
+          <path d="M5 8l4 4 4-4"/>
+          <path d="M3 14h12"/>
+        </svg>
+      </button>
+      <div id="export-dropdown" class="export-dropdown" role="menu" aria-label="Export format">
+        <button class="export-option" role="menuitem" data-format="markdown" tabindex="-1">Markdown (.md)</button>
+        <button class="export-option" role="menuitem" data-format="html" tabindex="-1">HTML (.html)</button>
+        <button class="export-option" role="menuitem" data-format="json" tabindex="-1">JSON (.json)</button>
+      </div>
+    </div>
     <button id="settings-btn" type="button" aria-label="Open settings" title="Settings">⚙</button>
   </header>
 

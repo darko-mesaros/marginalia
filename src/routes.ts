@@ -1,6 +1,8 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { randomUUID } from "node:crypto";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { ConversationStore } from "./conversation-store.js";
 import { MarginaliaAgent } from "./agent.js";
 import { ContextAssembler } from "./context-assembler.js";
@@ -11,6 +13,7 @@ import { LibraryError } from "./conversation-library.js";
 import type { ConversationLibrary } from "./conversation-library.js";
 import type { TitleGenerator } from "./title-generator.js";
 import type { McpConfigManager } from "./mcp-config-manager.js";
+import { sanitiseTitle, exportMarkdown, exportHtml } from "./exporters.js";
 import {
   initSSE,
   onClientDisconnect,
@@ -369,6 +372,70 @@ export function createRouter(deps: RouterDeps): Router {
         return;
       }
       res.status(500).json({ error: "Failed to load conversation" });
+    }
+  });
+
+  router.get("/api/conversations/:id/export", async (req: Request, res: Response) => {
+    const VALID_FORMATS = ["markdown", "html", "json"] as const;
+    type ExportFormat = (typeof VALID_FORMATS)[number];
+
+    const format = req.query.format as string | undefined;
+    if (!format || !VALID_FORMATS.includes(format as ExportFormat)) {
+      res.status(400).json({ error: "Invalid or missing format. Supported formats: markdown, html, json" });
+      return;
+    }
+
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    try {
+      if (format === "json") {
+        const exists = await library.exists(id);
+        if (!exists) {
+          res.status(404).json({ error: "Conversation not found" });
+          return;
+        }
+
+        let rawJson: string;
+        try {
+          rawJson = await fs.readFile(path.join(dataDir, "chats", `${id}.json`), "utf-8");
+        } catch (err: unknown) {
+          const e = err as NodeJS.ErrnoException;
+          if (e.code === "ENOENT") {
+            res.status(404).json({ error: "Conversation not found" });
+            return;
+          }
+          throw e;
+        }
+
+        const parsed = JSON.parse(rawJson);
+        const title = sanitiseTitle(typeof parsed.title === "string" ? parsed.title : "conversation");
+
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="${title}.json"`);
+        res.send(rawJson);
+      } else {
+        const conversation = await library.load(id);
+        const title = sanitiseTitle(conversation.title);
+
+        if (format === "markdown") {
+          const content = exportMarkdown(conversation);
+          res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+          res.setHeader("Content-Disposition", `attachment; filename="${title}.md"`);
+          res.send(content);
+        } else {
+          const content = exportHtml(conversation);
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          res.setHeader("Content-Disposition", `attachment; filename="${title}.html"`);
+          res.send(content);
+        }
+      }
+    } catch (err) {
+      if (err instanceof LibraryError && err.code === "NOT_FOUND") {
+        res.status(404).json({ error: "Conversation not found" });
+        return;
+      }
+      console.error("[routes] export failed:", err);
+      res.status(500).json({ error: "Export failed" });
     }
   });
 
