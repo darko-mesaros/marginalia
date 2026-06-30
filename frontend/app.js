@@ -227,6 +227,9 @@ function renderConversationList() {
   const activeId = state.conversation && state.conversation.id;
 
   for (const summary of summaries) {
+    const row = document.createElement("div");
+    row.className = "conversation-entry-row";
+
     const btn = document.createElement("button");
     btn.className = "conversation-entry";
     btn.type = "button";
@@ -251,7 +254,23 @@ function renderConversationList() {
       loadConversation(summary.id);
     });
 
-    listEl.appendChild(btn);
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "conversation-delete-btn";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "\uD83D\uDDD1"; // 🗑
+    deleteBtn.title = "Delete conversation";
+    deleteBtn.setAttribute(
+      "aria-label",
+      `Delete conversation: ${summary.title || "Untitled Conversation"}`
+    );
+    deleteBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteConversation(summary.id);
+    });
+
+    row.appendChild(btn);
+    row.appendChild(deleteBtn);
+    listEl.appendChild(row);
   }
 }
 
@@ -265,6 +284,59 @@ function renderConversationList() {
  */
 function updateConversationTitle(title) {
   document.getElementById("conversation-title").textContent = title;
+}
+
+/**
+ * Reset the UI and in-memory state to a clean, empty conversation.
+ * Shared by "New Conversation" and the delete flow (when the active
+ * conversation is removed).
+ * @param {string|null} newId — the new conversation id, or null when there
+ *   is no active server-side conversation yet.
+ */
+function resetConversationView(newId = null) {
+  // Clear panels
+  mainPanel.innerHTML = "";
+  marginNotePanel.innerHTML = "";
+  document.getElementById("continuation-area").classList.remove("visible");
+
+  // Reset state
+  state.conversation = {
+    id: newId,
+    title: "Untitled Conversation",
+    mainThread: [],
+    sideThreads: [],
+  };
+
+  // Update title display
+  updateConversationTitle("Untitled Conversation");
+
+  // Clear anchor highlights
+  anchorRanges.length = 0;
+  if (typeof CSS !== "undefined" && CSS.highlights) {
+    CSS.highlights.delete("marginalia-anchors");
+    // Clear per-thread highlights
+    for (const key of CSS.highlights.keys()) {
+      if (key.startsWith("marginalia-anchor-")) CSS.highlights.delete(key);
+    }
+  }
+  // Clear dynamic highlight style rules
+  if (highlightStyleEl && highlightStyleEl.sheet) {
+    while (highlightStyleEl.sheet.cssRules.length > 0) {
+      highlightStyleEl.sheet.deleteRule(0);
+    }
+  }
+
+  // Re-enable input
+  questionInput.disabled = false;
+  askBtn.disabled = false;
+  questionInput.value = "";
+
+  // Hide export button (no messages) and collapse-all control
+  updateExportButtonVisibility();
+  allNotesCollapsed = false;
+  updateCollapseAllIcon();
+  updateCollapseAllVisibility();
+  markConnectorsDirty();
 }
 
 /**
@@ -285,49 +357,9 @@ async function handleNewConversation() {
 
     const data = await res.json();
 
-    // Clear panels
-    mainPanel.innerHTML = "";
-    marginNotePanel.innerHTML = "";
-    document.getElementById("continuation-area").classList.remove("visible");
-
-    // Reset state
-    state.conversation = {
-      id: data.id,
-      title: "Untitled Conversation",
-      mainThread: [],
-      sideThreads: [],
-    };
-
-    // Update title display
-    updateConversationTitle("Untitled Conversation");
-
-    // Clear anchor highlights
-    anchorRanges.length = 0;
-    if (typeof CSS !== "undefined" && CSS.highlights) {
-      CSS.highlights.delete("marginalia-anchors");
-      // Clear per-thread highlights
-      for (const key of CSS.highlights.keys()) {
-        if (key.startsWith("marginalia-anchor-")) CSS.highlights.delete(key);
-      }
-    }
-    // Clear dynamic highlight style rules
-    if (highlightStyleEl && highlightStyleEl.sheet) {
-      while (highlightStyleEl.sheet.cssRules.length > 0) {
-        highlightStyleEl.sheet.deleteRule(0);
-      }
-    }
-
-    // Re-enable and focus input
-    questionInput.disabled = false;
-    askBtn.disabled = false;
-    questionInput.value = "";
+    // Reset the view to a clean state bound to the new conversation id
+    resetConversationView(data.id);
     questionInput.focus();
-
-    // Hide export button (no messages in new conversation)
-    updateExportButtonVisibility();
-    allNotesCollapsed = false;
-    updateCollapseAllIcon();
-    updateCollapseAllVisibility();
 
     // Refresh sidebar list
     fetchConversationList();
@@ -337,6 +369,51 @@ async function handleNewConversation() {
     const errorEl = document.createElement("div");
     errorEl.style.cssText = "color: #c62828; background: #ffebee; border-radius: 4px; padding: 12px; margin: 8px;";
     errorEl.textContent = err.message || "Failed to create new conversation";
+    listEl.prepend(errorEl);
+  }
+}
+
+/**
+ * Delete a saved conversation after confirmation. Removes it from the sidebar
+ * and, if it is the currently loaded conversation, resets the view.
+ * @param {string} id — the conversation id to delete
+ */
+async function deleteConversation(id) {
+  const summary = (state.conversationList || []).find((s) => s.id === id);
+  const title = summary ? (summary.title || "Untitled Conversation") : "this conversation";
+
+  if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+
+    if (res.status === 404) {
+      // Already gone — just refresh the list to drop the stale entry
+      fetchConversationList();
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`Failed to delete conversation (${res.status})`);
+    }
+
+    // Drop from the cached list
+    state.conversationList = (state.conversationList || []).filter((s) => s.id !== id);
+
+    // If we deleted the conversation currently on screen, reset to a clean view
+    if (state.conversation && state.conversation.id === id) {
+      resetConversationView(null);
+    }
+
+    renderConversationList();
+  } catch (err) {
+    // Surface the error at the top of the sidebar without disrupting state
+    const listEl = document.getElementById("conversation-list");
+    const errorEl = document.createElement("div");
+    errorEl.style.cssText = "color: #c62828; background: #ffebee; border-radius: 4px; padding: 12px; margin: 8px;";
+    errorEl.textContent = err.message || "Failed to delete conversation";
     listEl.prepend(errorEl);
   }
 }

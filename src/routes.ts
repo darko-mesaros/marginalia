@@ -375,6 +375,32 @@ export function createRouter(deps: RouterDeps): Router {
     }
   });
 
+  router.delete("/api/conversations/:id", async (req: Request, res: Response) => {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    try {
+      const exists = await library.exists(id);
+      if (!exists) {
+        res.status(404).json({ error: "Conversation not found" });
+        return;
+      }
+
+      await library.delete(id);
+
+      // If the deleted conversation is the one currently loaded in the
+      // in-memory store, reset the store so the next request starts fresh.
+      const current = store.getConversation();
+      if (current && current.id === id) {
+        store.reset();
+      }
+
+      res.status(200).json({ success: true });
+    } catch (err) {
+      console.error("[routes] delete conversation failed:", err);
+      res.status(500).json({ error: "Failed to delete conversation" });
+    }
+  });
+
   router.get("/api/conversations/:id/export", async (req: Request, res: Response) => {
     const VALID_FORMATS = ["markdown", "html", "json"] as const;
     type ExportFormat = (typeof VALID_FORMATS)[number];

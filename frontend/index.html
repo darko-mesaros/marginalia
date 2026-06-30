@@ -838,6 +838,51 @@
       color: var(--color-text-secondary);
     }
 
+    /* ── Conversation Entry Row (entry + delete button) ── */
+    .conversation-entry-row {
+      position: relative;
+      display: flex;
+      align-items: stretch;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .conversation-entry-row .conversation-entry {
+      flex: 1;
+      min-width: 0;
+      border-bottom: none;
+    }
+
+    .conversation-delete-btn {
+      position: absolute;
+      top: 50%;
+      right: 8px;
+      transform: translateY(-50%);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      background: var(--color-surface);
+      color: var(--color-text-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      line-height: 1;
+    }
+
+    .conversation-entry-row:hover .conversation-delete-btn,
+    .conversation-delete-btn:focus-visible {
+      display: flex;
+    }
+
+    .conversation-delete-btn:hover {
+      background: #ffebee;
+      color: #c62828;
+      border-color: #ef9a9a;
+    }
+
     /* ── Conversation Title ── */
     #conversation-title {
       font-size: 0.85rem;
