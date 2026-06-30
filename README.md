@@ -47,6 +47,29 @@ If you want to start it with a different model you can do:
 BEDROCK_MODEL_ID="moonshotai.kimi-k2.5" npm start
 ```
 
+### Running with `just`
+
+A [`justfile`](justfile) is included for convenience. It lets you launch the
+server with a specific model and pick which AWS profile to authenticate with
+(handy if you keep your Bedrock access on a personal/named profile):
+
+```bash
+just run                                  # default model + default AWS profile
+just run "moonshotai.kimi-k2.5"           # pick a model
+just run "moonshotai.kimi-k2.5" personal  # pick a model + AWS profile
+```
+
+The selected profile is exported as `AWS_PROFILE`, which the Strands
+`BedrockModel` picks up via the standard AWS SDK credential chain — no code
+changes needed. You can also override the defaults globally:
+
+```bash
+just model="amazon.nova-pro-v1:0" profile="personal" run
+```
+
+Other recipes: `just install`, `just dev` (auto-reload), `just build`,
+`just test`. Run `just` on its own to list them all.
+
 ### Development Mode
 
 ```bash
