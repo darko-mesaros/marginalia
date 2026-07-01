@@ -287,6 +287,36 @@ function updateConversationTitle(title) {
 }
 
 /**
+ * Render the empty-state welcome message into the main panel, inviting the
+ * user to start a conversation. Shown on first load when there are no saved
+ * conversations, and after starting a New Conversation.
+ */
+function showWelcomeMessage() {
+  mainPanel.innerHTML = "";
+  const welcome = document.createElement("div");
+  welcome.className = "welcome-message";
+
+  const heading = document.createElement("h1");
+  heading.textContent = "Start learning by asking away!";
+
+  const sub = document.createElement("p");
+  sub.textContent =
+    "Ask a question in the bar above and Marginalia will write you a deep-dive explainer. Highlight any passage to ask follow-up questions in the margins.";
+
+  welcome.appendChild(heading);
+  welcome.appendChild(sub);
+  mainPanel.appendChild(welcome);
+}
+
+/**
+ * Remove the welcome message from the main panel if present.
+ */
+function clearWelcomeMessage() {
+  const welcome = mainPanel.querySelector(".welcome-message");
+  if (welcome) welcome.remove();
+}
+
+/**
  * Reset the UI and in-memory state to a clean, empty conversation.
  * Shared by "New Conversation" and the delete flow (when the active
  * conversation is removed).
@@ -337,6 +367,9 @@ function resetConversationView(newId = null) {
   updateCollapseAllIcon();
   updateCollapseAllVisibility();
   markConnectorsDirty();
+
+  // Show the welcome / empty-state message
+  showWelcomeMessage();
 }
 
 /**
@@ -711,6 +744,9 @@ async function submitQuestion(question) {
     content: question,
     toolInvocations: [],
   });
+
+  // Remove the empty-state welcome message before rendering the response
+  clearWelcomeMessage();
 
   // Create a placeholder section with a temporary id; will be updated on `done`
   const tempId = uid();
@@ -2721,3 +2757,36 @@ saveSystemPromptBtn.addEventListener("click", saveSystemPrompt);
 addSkillFileBtn.addEventListener("click", addSkillFile);
 addMcpServerBtn.addEventListener("click", addMcpServer);
 document.getElementById("add-env-row-btn").addEventListener("click", addEnvRow);
+
+
+// ---------------------------------------------------------------------------
+// Landing page initialization
+// ---------------------------------------------------------------------------
+
+/**
+ * On initial load, show the most recently updated conversation if one exists,
+ * otherwise show the welcome / empty-state message ("Start learning by asking
+ * away!"). The conversation list is sorted by updatedAt descending, so the
+ * first summary is the latest conversation.
+ */
+async function initLandingPage() {
+  try {
+    const res = await fetch("/api/conversations");
+    if (!res.ok) throw new Error(`Failed to load conversations (${res.status})`);
+    const summaries = await res.json();
+    state.conversationList = Array.isArray(summaries) ? summaries : [];
+
+    if (state.conversationList.length > 0) {
+      await loadConversation(state.conversationList[0].id);
+    } else {
+      showWelcomeMessage();
+    }
+  } catch (err) {
+    // Fall back to the welcome message so the app remains usable
+    console.error("Failed to initialize landing page:", err);
+    showWelcomeMessage();
+  }
+}
+
+// Kick off landing-page initialization on load
+initLandingPage();
