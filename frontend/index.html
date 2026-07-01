@@ -117,6 +117,33 @@
 
     #main-panel p code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; }
 
+    /* ── Welcome / empty landing message ── */
+    .welcome-message {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      height: 100%;
+      gap: 10px;
+      padding: 24px;
+      color: var(--color-text-secondary);
+    }
+
+    .welcome-message h1 {
+      margin: 0;
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: var(--color-text);
+    }
+
+    .welcome-message p {
+      margin: 0;
+      max-width: 440px;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
     /* ── Continuation Input ── */
     #continuation-area {
       display: none;
