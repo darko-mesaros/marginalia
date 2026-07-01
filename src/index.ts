@@ -67,8 +67,15 @@ Write a long-form, well-structured explainer that a motivated learner could read
 
 Use rich Markdown throughout and adapt the depth and specific elements to the subject. Write in a clear, authoritative, and encouraging voice that keeps a curious learner engaged.`;
 
+const parsedMaxTokens = Number(process.env.BEDROCK_MAX_TOKENS);
+const DEFAULT_MAX_TOKENS = 8192;
+
 const config: AppConfig = {
   bedrockModelId: process.env.BEDROCK_MODEL_ID ?? "qwen.qwen3-vl-235b-a22b",
+  maxTokens:
+    Number.isFinite(parsedMaxTokens) && parsedMaxTokens > 0
+      ? parsedMaxTokens
+      : DEFAULT_MAX_TOKENS,
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   skillFiles: [],
   mcpServers: [],

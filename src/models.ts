@@ -69,6 +69,14 @@ export interface MCPServerConfig {
 
 export interface AppConfig {
   bedrockModelId: string;
+  /**
+   * Maximum number of output tokens the model may generate per response.
+   * When omitted, Bedrock applies its own per-model default, which is low
+   * for some models (e.g. Anthropic Claude) and can cause responses to be
+   * truncated with a `maxTokens` stop reason. Set this explicitly to allow
+   * long-form answers.
+   */
+  maxTokens?: number;
   systemPrompt: string;
   skillFiles: SkillFile[];
   mcpServers: MCPServerConfig[];
