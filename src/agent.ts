@@ -44,6 +44,12 @@ export class MarginaliaAgent {
   ): Agent {
     const model = new BedrockModel({
       modelId: this.config.bedrockModelId,
+      // Only pass maxTokens when configured. Bedrock omits an output cap
+      // otherwise, falling back to a low per-model default that can truncate
+      // long responses and raise an unrecoverable `maxTokens` error.
+      ...(this.config.maxTokens !== undefined
+        ? { maxTokens: this.config.maxTokens }
+        : {}),
     });
 
     return new Agent({

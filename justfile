@@ -17,6 +17,10 @@ profile := env_var_or_default("AWS_PROFILE", "default")
 # Server port
 port := "3000"
 
+# Max output tokens per response. Raise this for long answers; some models
+# (notably Anthropic Claude, e.g. Opus) truncate with an error if it's too low.
+maxtokens := "8192"
+
 # Show available recipes
 default:
     @just --list
@@ -28,11 +32,11 @@ install:
 # Launch the server with a specific model and AWS profile.
 # Positional args override the variables above: `just run <model> <profile>`
 run model=model profile=profile:
-    AWS_PROFILE="{{profile}}" BEDROCK_MODEL_ID="{{model}}" PORT="{{port}}" npm start
+    AWS_PROFILE="{{profile}}" BEDROCK_MODEL_ID="{{model}}" BEDROCK_MAX_TOKENS="{{maxtokens}}" PORT="{{port}}" npm start
 
 # Same as `run` but with auto-reload (tsx watch)
 dev model=model profile=profile:
-    AWS_PROFILE="{{profile}}" BEDROCK_MODEL_ID="{{model}}" PORT="{{port}}" npm run dev
+    AWS_PROFILE="{{profile}}" BEDROCK_MODEL_ID="{{model}}" BEDROCK_MAX_TOKENS="{{maxtokens}}" PORT="{{port}}" npm run dev
 
 # Compile TypeScript
 build:

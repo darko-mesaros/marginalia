@@ -40,6 +40,7 @@ Opens on [http://localhost:3000](http://localhost:3000).
 |---|---|---|
 | `PORT` | `3000` | Server port |
 | `BEDROCK_MODEL_ID` | `qwen.qwen3-vl-235b-a22b` | Bedrock model to use |
+| `BEDROCK_MAX_TOKENS` | `8192` | Max output tokens per response. Raise for longer answers; some models (e.g. Anthropic Claude) error out if left at their low Bedrock default |
 | `MARGINALIA_DATA_DIR` | `~/.config/marginalia/` | Override data/config directory |
 
 If you want to start it with a different model you can do:
@@ -69,6 +70,13 @@ just model="amazon.nova-pro-v1:0" profile="personal" run
 
 Other recipes: `just install`, `just dev` (auto-reload), `just build`,
 `just test`. Run `just` on its own to list them all.
+
+To raise the output length cap (e.g. for very long answers, or to avoid the
+"maximum token limit" error some Claude models raise at their low default):
+
+```bash
+just maxtokens="16384" model="<your-claude-model-id>" profile="personal" run
+```
 
 ### Development Mode
 
